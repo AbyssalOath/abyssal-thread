@@ -26,6 +26,9 @@ all from the same pattern.
 - **Crash-safe editing** - your work is autosaved continuously and offered
   back to you if the app ever closes unexpectedly.
 
+## Demo
+![Grid demo](screenshots/grid_demo.gif)
+
 ## Install & run
 
 Requires a recent [Rust toolchain](https://rustup.rs/).
