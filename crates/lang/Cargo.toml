@@ -1,0 +1,9 @@
+[package]
+name = "abyssal-thread-lang"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+abyssal-thread-core = { path = "../core" }
+thiserror = { workspace = true }
+petgraph = { workspace = true }

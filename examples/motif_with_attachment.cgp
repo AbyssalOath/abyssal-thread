@@ -1,0 +1,17 @@
+# Demonstrates labels + explicit attachment points, and a custom stitch
+# DEF line (parsed but not yet expanded - see lang::ast::Pattern::definitions
+# and the TODO in eval.rs).
+DEF: p = 3ch, ss@1[%,%-4]
+
+PATTERN: motif_with_attachment
+
+6sc
+
+# Label applies to the *next* stitch op (comma-separated, like any other op).
+# Here the 3rd stitch of round 1 gets tagged "anchor" for later reference.
+sc, sc, anchor!, sc, sc, sc, sc
+
+# This round's first stitch skips the positional parent cursor and attaches
+# directly into the labeled stitch (useful for picots, Irish crochet motifs,
+# joining separate pieces, etc). The rest of the round continues positionally.
+@anchor, sc, 5sc

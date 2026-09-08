@@ -1,0 +1,13 @@
+# Basic amigurumi sphere: 6-stitch magic-ring start, standard inc/dec shaping.
+# Stitch counts: 6, 12, 18, 24, 24, 24, 18, 12, 6
+PATTERN: sphere
+
+6sc
+(inc) * 6
+(sc, inc) * 6
+(2sc, inc) * 6
+24sc
+24sc
+(2sc, dec) * 6
+(sc, dec) * 6
+(dec) * 6

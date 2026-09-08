@@ -1,0 +1,8 @@
+[package]
+name = "abyssal-thread-layout"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+abyssal-thread-core = { path = "../core" }
+petgraph = { workspace = true }

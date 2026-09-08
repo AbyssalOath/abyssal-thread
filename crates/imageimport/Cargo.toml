@@ -1,0 +1,9 @@
+[package]
+name = "abyssal-thread-imageimport"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+abyssal-thread-core = { path = "../core" }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+anyhow = { workspace = true }

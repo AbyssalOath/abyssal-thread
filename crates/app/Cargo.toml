@@ -1,0 +1,51 @@
+[package]
+name = "abyssal-thread"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license-file.workspace = true
+
+[[bin]]
+name = "abyssal-thread"
+path = "src/main.rs"
+
+[dependencies]
+abyssal-thread-core = { path = "../core" }
+abyssal-thread-lang = { path = "../lang" }
+abyssal-thread-layout = { path = "../layout" }
+abyssal-thread-export = { path = "../export" }
+abyssal-thread-imageimport = { path = "../imageimport" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+petgraph = { workspace = true }
+eframe = "0.27"
+egui = "0.27"
+rfd = "0.14"
+# Must match crates/imageimport/Cargo.toml's `image` version+features exactly -
+# gui/image_import.rs uses `image::DynamicImage` directly, and a version
+# mismatch would make it a different (incompatible) type than the one
+# abyssal-thread-imageimport's public functions return.
+image = { version = "0.24", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+# Multi-page tiled pattern PDF generation ("Export PDF..."/"Print...") and
+# handing that PDF off to the OS's default viewer so its own Print button
+# can be used - see crates/app/src/print.rs for why there's no more direct
+# cross-platform "send to printer" API in Rust than that.
+printpdf = "0.7"
+opener = "0.7"
+# Text-to-pattern rendering ("Text" tab / text_import.rs). Pinned to
+# imageproc 0.23 + rusttype 0.9 specifically because imageproc 0.24 requires
+# image ^0.25, which would conflict with the image 0.24 pin above (two
+# different major versions of `image` in the same binary means its
+# `DynamicImage` type is NOT the same type across the two - a real
+# compile-time incompatibility, not just an inconvenience). imageproc 0.23
+# is the newest release that still depends on image ^0.24.
+imageproc = "0.23"
+rusttype = "0.9"
+
+# Swap the custom wireframe viewport in gui/viewport.rs for a real
+# shaded/textured mesh renderer later:
+#   three-d = "0.17"     # or wgpu directly, for the 3D stitch model viewport

@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/lang",
+    "crates/layout",
+    "crates/export",
+    "crates/imageimport",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+description = "A crochet CAD tool: DSL/paint grid -> 3D model -> chart/print export"
+repository = "https://github.com/AbyssalOath/abyssal-thread"
+readme = "README.md"
+license-file = "LICENSE"
+keywords = ["crochet", "cad", "pattern", "crafts"]
+categories = ["graphics", "command-line-utilities"]
+
+[workspace.dependencies]
+petgraph = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }

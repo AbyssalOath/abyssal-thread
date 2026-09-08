@@ -1,0 +1,9 @@
+# Demonstrates a user-defined stitch alias: "shell" expands to 3dc wherever
+# it's used. See crates/lang/src/eval.rs for what custom-stitch expansion
+# does and doesn't support.
+DEF: shell = 3dc
+
+PATTERN: shell_demo
+
+6sc
+2shell
