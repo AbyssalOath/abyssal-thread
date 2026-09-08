@@ -26,8 +26,13 @@ all from the same pattern.
 - **Crash-safe editing** - your work is autosaved continuously and offered
   back to you if the app ever closes unexpectedly.
 
-## Demo
+## Demonstrations
 ![Grid demo](screenshots/grid_demo.gif)
+
+![Image import demo](screenshots/image_import_demo.gif)
+
+![Text demo](screenshots/text_demo.gif)
+
 
 ## Install & run
 
