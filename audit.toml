@@ -1,7 +1,7 @@
 [advisories]
 ignore = [
-    "RUSTSEC-2026-0187", # lopdf 0.31 via printpdf 0.7 — fix requires printpdf 0.9 (breaking API, tracked separately)
-    "RUSTSEC-2026-0257", # webbrowser 0.8 via eframe 0.27 — fix requires eframe 0.29+ (breaking egui API, tracked separately)
+    "RUSTSEC-2026-0187", # lopdf 0.31 via printpdf 0.7 — fix requires printpdf 0.9 (breaking API, tracked separately) - tracked in issue #1
+    "RUSTSEC-2026-0257", # webbrowser 0.8 via eframe 0.27 — fix requires eframe 0.29+ (breaking egui API, tracked separately) - tracked in issue #2
     "RUSTSEC-2024-0388", # derivative — unmaintained, transitive, low risk
     "RUSTSEC-2024-0384", # instant — unmaintained, transitive, low risk
     "RUSTSEC-2024-0436", # paste — unmaintained, transitive, low risk
