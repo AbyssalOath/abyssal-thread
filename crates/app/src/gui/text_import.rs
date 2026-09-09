@@ -23,9 +23,9 @@ use crate::gui::fonts::FONT_FAMILIES;
 use abyssal_thread_core::ColorGrid;
 use abyssal_thread_imageimport::{quantize, resize_exact, resize_preserving_aspect, ResizeFilter};
 use eframe::egui::{self, Color32, ColorImage, TextureHandle, TextureOptions};
+use ab_glyph::{FontArc, PxScale};
 use image::{DynamicImage, Rgba, RgbaImage};
 use imageproc::drawing::{draw_text_mut, text_size};
-use rusttype::{Font, Scale};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SizeMode {
@@ -41,7 +41,7 @@ pub struct TextImportState {
     selected_system_font: Option<String>,
     bold: bool,
     italic: bool,
-    font: Option<Font<'static>>,
+    font: Option<FontArc>,
     /// Resolution (in px) the text is rendered at before being resized
     /// down to the target stitch grid - this is source detail, not final
     /// stitch count, so it rarely needs adjusting once set reasonably high.
@@ -101,19 +101,24 @@ impl Default for TextImportState {
 
 /// Renders `text` (split on `\n` into lines) onto a canvas sized to fit,
 /// each line independently horizontally centered.
-fn render_text_image(text: &str, font: &Font<'static>, font_size: f32, fg: [u8; 3], bg: [u8; 3]) -> DynamicImage {
+fn render_text_image(text: &str, font: &FontArc, font_size: f32, fg: [u8; 3], bg: [u8; 3]) -> DynamicImage {
     let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
     if lines.is_empty() {
         return DynamicImage::ImageRgba8(RgbaImage::from_pixel(1, 1, Rgba([bg[0], bg[1], bg[2], 255])));
     }
 
-    let scale = Scale::uniform(font_size);
+    let scale = PxScale::from(font_size);
     let line_height = (font_size * 1.3).round() as i32;
 
-    let mut line_widths = Vec::with_capacity(lines.len());
+    let mut line_widths: Vec<i32> = Vec::with_capacity(lines.len());
     let mut max_width = 0i32;
     for line in &lines {
+        // ab_glyph-backed text_size returns (u32, u32) - the old
+        // rusttype-backed one returned (i32, i32) - cast immediately so
+        // the signed centering math below (which needs negative
+        // intermediates before `.max(0)` clamps them) is unaffected.
         let (w, _h) = text_size(scale, font, line);
+        let w = w as i32;
         line_widths.push(w);
         max_width = max_width.max(w);
     }
@@ -136,7 +141,7 @@ fn render_text_image(text: &str, font: &Font<'static>, font_size: f32, fg: [u8; 
 impl TextImportState {
     fn reload_font(&mut self) {
         if let Some(path) = self.custom_font_path.clone() {
-            match std::fs::read(&path).ok().and_then(Font::try_from_vec) {
+            match std::fs::read(&path).ok().and_then(|bytes| FontArc::try_from_vec(bytes).ok()) {
                 Some(font) => {
                     self.font = Some(font);
                     self.status.clear();
@@ -147,12 +152,12 @@ impl TextImportState {
         }
         let family = &FONT_FAMILIES[self.selected_family];
         let bytes = family.bytes_for(self.bold, self.italic);
-        match Font::try_from_bytes(bytes) {
-            Some(font) => {
+        match FontArc::try_from_slice(bytes) {
+            Ok(font) => {
                 self.font = Some(font);
                 self.status.clear();
             }
-            None => self.status = format!("couldn't parse bundled font '{}'", family.name),
+            Err(_) => self.status = format!("couldn't parse bundled font '{}'", family.name),
         }
     }
 

@@ -33,7 +33,7 @@ rfd = "0.14"
 # gui/image_import.rs uses `image::DynamicImage` directly, and a version
 # mismatch would make it a different (incompatible) type than the one
 # abyssal-thread-imageimport's public functions return.
-image = { version = "0.24", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
 # Multi-page tiled pattern PDF generation ("Export PDF..."/"Print...") and
 # handing that PDF off to the OS's default viewer so its own Print button
 # can be used - see crates/app/src/print.rs for why there's no more direct
@@ -47,8 +47,8 @@ opener = "0.7"
 # `DynamicImage` type is NOT the same type across the two - a real
 # compile-time incompatibility, not just an inconvenience). imageproc 0.23
 # is the newest release that still depends on image ^0.24.
-imageproc = "0.23"
-rusttype = "0.9"
+imageproc = "0.27"
+ab_glyph = "0.2"
 
 # Swap the custom wireframe viewport in gui/viewport.rs for a real
 # shaded/textured mesh renderer later:
