@@ -37,6 +37,8 @@ pub struct TextImportState {
     text: String,
     selected_family: usize,
     custom_font_path: Option<String>,
+    system_font_names: Vec<String>,
+    selected_system_font: Option<String>,
     bold: bool,
     italic: bool,
     font: Option<Font<'static>>,
@@ -68,6 +70,8 @@ impl Default for TextImportState {
             text: String::new(),
             selected_family: 0,
             custom_font_path: None,
+            system_font_names: crate::gui::fonts::enumerate_system_font_families(),
+            selected_system_font: None,
             bold: false,
             italic: false,
             font: None,
@@ -243,6 +247,30 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
                 changed = true;
             }
         }
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Or an installed system font:");
+        let current = state.selected_system_font.clone().unwrap_or_else(|| "(none)".to_string());
+        egui::ComboBox::from_id_source("text_import_system_font")
+            .selected_text(current)
+            .show_ui(ui, |ui| {
+                for name in state.system_font_names.clone() {
+                    let is_selected = state.selected_system_font.as_deref() == Some(name.as_str());
+                    if ui.selectable_label(is_selected, &name).clicked() {
+                        state.selected_system_font = Some(name.clone());
+                        match crate::gui::fonts::resolve_system_font_path(&name) {
+                            Some(path) => {
+                                state.custom_font_path = Some(path);
+                                changed = true;
+                            }
+                            None => {
+                                state.status = format!("'{name}' has no loadable font file (likely a memory-only system font)");
+                            }
+                        }
+                    }
+                }
+            });
     });
 
     if changed {

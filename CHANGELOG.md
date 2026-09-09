@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.1.0] - Unreleased
+## [0.2.0]
 
 Initial release. Highlights:
 
@@ -51,6 +51,18 @@ Initial release. Highlights:
   background-color/text-color tension/yarn-color encoding.
 - Debounced gauge/relax controls: a drag gesture triggers one recompile on
   release rather than one per pixel dragged.
+- Shaped-pattern print/PDF export (`print_shaped.rs`): multi-page tiled
+  PDF showing each stitch's abbreviation, colored by tension state or by
+  an explicit per-stitch `~RRGGBB` color when set, with round-numbered
+  axis labels (round 0 at the bottom, matching real working order rather
+  than colorwork's top-down photo convention) and a tension/color key
+  page. "Export PDF..."/"Print..." now work for both pattern modes.
+- Point-and-click custom-stitch builder (`gui/def_builder.rs`) in the DSL
+  tab - covers the alias form of `DEF:` (name + ordered list of stitches);
+  the raw-geometry form still requires hand-written DSL.
+- Full OS font enumeration for the Text tab (`font-kit`), alongside the
+  existing bundled-family dropdown and manual "browse for a font file"
+  option - three ways to pick a font now, not one.
 
 ### Added - round-trip fidelity & diagnostics
 - `StitchNode`/`GridCell` track `def_origin` (which `DEF` produced a
@@ -88,6 +100,3 @@ Initial release. Highlights:
   `categories`) in `Cargo.toml`.
 
 ### Known gaps (see ARCHITECTURE.md for the full list)
-- Shaped-pattern PDF/print export doesn't exist (colorwork-only so far).
-- No point-and-click `DEF`-authoring UI - custom stitches are DSL text only.
-- Font selection is a small curated bundle, not full OS font enumeration.

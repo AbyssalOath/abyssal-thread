@@ -24,6 +24,10 @@ anyhow = { workspace = true }
 petgraph = { workspace = true }
 eframe = "0.27"
 egui = "0.27"
+# OS-installed font enumeration for the Text tab's system-font dropdown.
+# Needs libfontconfig1-dev + libfreetype6-dev at build time on Linux;
+# Windows (DirectWrite) and macOS (Core Text) need nothing extra.
+font-kit = "0.14"
 rfd = "0.14"
 # Must match crates/imageimport/Cargo.toml's `image` version+features exactly -
 # gui/image_import.rs uses `image::DynamicImage` directly, and a version

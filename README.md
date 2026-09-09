@@ -21,8 +21,9 @@ all from the same pattern.
   relative to your gauge, right in the 3D view and the grid editor.
 - **Real crochet charts** - standard US stitch symbols, not placeholders,
   exported as SVG.
-- **Print-ready PDFs** for colorwork charts, tiled across pages with
-  reference numbers and a color legend, ready to tape together.
+- **Print-ready PDFs** for both shaped and colorwork patterns, tiled
+  across pages with reference numbers and a color/tension legend, ready
+  to tape together.
 - **Crash-safe editing** - your work is autosaved continuously and offered
   back to you if the app ever closes unexpectedly.
 
@@ -38,9 +39,10 @@ all from the same pattern.
 
 Requires a recent [Rust toolchain](https://rustup.rs/).
 
-On Linux, the GUI's file dialogs need GTK development headers installed
-first: `sudo apt install libgtk-3-dev` (Debian/Ubuntu - use your distro's
-equivalent package otherwise). Not needed on Windows or macOS.
+On Linux, you'll also need a few system libraries before `cargo build`
+will succeed: `sudo apt install libgtk-3-dev libfontconfig1-dev
+libfreetype6-dev` (Debian/Ubuntu; adjust for your distro). Windows and
+macOS need nothing extra - both dependencies use OS-native APIs there.
 
 ```bash
 git clone https://github.com/AbyssalOath/abyssal-thread.git

@@ -62,6 +62,7 @@ abyssal-thread/
 │       └── src/
 │           ├── print.rs    multi-page tiled pattern PDF generation
 │           │               + hand-off to the OS's default PDF viewer
+│           ├── print_shaped.rs  same, for shaped (non-colorwork) patterns
 │           └── gui/        mod.rs (view tabs, undo/redo, DSL sync,
 │                           autosave/crash recovery), grid.rs (shaped
 │                           stitch grid), colorwork_grid.rs (paint grid:
@@ -70,6 +71,9 @@ abyssal-thread/
 │                           GridImportPayload), text_import.rs (font
 │                           dropdown + bold/italic, per-line centering),
 │                           fonts.rs (bundled FontFamily registry),
+│                           OS font enumeration via font-kit),
+│                           def_builder.rs (point-and-click DEF alias
+│                           builder),
 │                           recent_colors.rs (shared color-picker history)
 ├── .github/workflows/      ci.yml (test/fmt/clippy/audit on push),
 │                           release.yml (tagged builds for Win/macOS/Linux)
@@ -172,9 +176,10 @@ Hardened against a degenerate (0x0) source image - `resize_preserving_aspect`
 clamps before dividing, rather than letting a NaN/infinity silently
 saturating-cast into a multi-billion-pixel resize target.
 
-**Working - text-to-pattern:** type words, pick a font family from a
-dropdown (bundled directly into the binary via `include_bytes!` - see
-`gui/fonts.rs` - so there's no font *file* for the user to hunt down),
+**Working - text-to-pattern:** type words, pick a font three ways:
+a bundled-family dropdown (embedded via `include_bytes!`, no file to hunt down),
+a manual "browse for a font file" picker, or a live dropdown of every
+font already installed on the system (`font-kit`, `gui/fonts.rs::enumerate_system_font_families`),
 toggle Bold/Italic (selects one of a family's four embedded variants,
 not a synthesized fake bold/italic), pick text/background color. Each
 line is measured and centered independently, not the block as a whole.
@@ -222,6 +227,12 @@ and getting it wrong on a partially-edited invocation risks silently
 emitting the *wrong* stitch count, worse than an honest, loudly-flagged
 flatten. See `StitchNode::def_origin`'s doc comment for the full reasoning.
 
+**Working - DEF authoring UI:** the DSL tab has a point-and-click builder
+(`gui/def_builder.rs`) for the *alias* form of `DEF:` - name it, add
+stitches from a dropdown in order, insert. Deliberately doesn't cover the
+raw-geometry form (`%`/`%-N` relative attachment) - building that
+visually would need a node/edge graph editor, not a list of dropdowns.
+
 **Working - crash recovery:** the live pattern is autosaved to a fixed
 temp-directory path on every successful compile. On the next launch, if a
 non-empty autosave differs from the fresh blank-canvas default, the app
@@ -243,24 +254,22 @@ Grayscale/Black & White in the print dialog, since that's a very common
 printer default and the most likely explanation if a printed pattern loses
 its color (the PDF's actual color data was verified directly at the byte
 level, not just visually).
+Shaped patterns print too now (`print_shaped.rs`): each stitch's
+abbreviation, colored by tension state or an explicit per-stitch color
+when one's set, with round 0 at the *bottom* of the chart (matching
+real bottom-up working order, the opposite of colorwork's top-down photo
+convention) and a tension/color key page instead of a hex legend.
 
 **Stubbed / TODO:**
 
-- **Font selection is a small curated bundled set** (4 families x 4
-  weights, `gui/fonts.rs`), not full OS font enumeration - adding a
-  family means downloading it from Google Fonts and adding an
-  `include_bytes!` entry, not something the end user can do themselves
-  from within the app.
-- **Shaped-pattern PDF/print export** - "Export PDF..."/"Print..." are
-  colorwork-only right now; a shaped pattern's stitch-symbol chart has no
-  print pipeline yet.
-- **No `DEF`-authoring UI** - custom stitches (both alias and raw-geometry
-  forms) only exist as raw DSL text typed into the DSL tab; there's no
-  point-and-click way to build one.
 - **`cargo audit`, `fmt`, and `clippy` are real CI gates** (`ci.yml`,
   `-D warnings` on clippy) but haven't been exercised against a large
   real-world pattern set yet - the safety limits above (10,000/500,000)
   are reasoned estimates, not load-tested numbers.
+- **No test coverage yet for the three newest features** - `print_shaped.rs`,
+  `def_builder.rs`, and the `font-kit` enumeration/resolution functions
+  in `fonts.rs` all shipped without `#[cfg(test)]` cases, unlike
+  everything else in "Testing" below.
 
 ## Testing
 
@@ -287,9 +296,11 @@ and PR.
 ## Suggested next milestones
 
 1. Shaped-pattern PDF/print export, to match what colorwork already has.
-2. A `DEF`-authoring UI, so custom stitches don't require hand-writing DSL.
-3. More bundled font families (or a way to let users add their own
-   without editing `fonts.rs`) if the current 4 feel limiting.
-4. Exercise the new safety limits (10,000 literal / 500,000 total
-   stitches) against real large patterns to confirm they're generous
-   enough in practice, not just in theory.
+2. Test coverage for the three newest features (see the new Stubbed/TODO
+   bullet above) - they're the only untested corner of the codebase now.
+3. Add `libfontconfig1-dev`/`libfreetype6-dev` to the Linux job in
+   `ci.yml` and `release.yml` - `font-kit` needs them at build time and
+   CI will start failing on Linux the moment this merges if they're missing.
+4. Exercise the safety limits (10,000 literal / 500,000 total stitches)
+   against real large patterns to confirm they're generous enough in
+   practice, not just in theory.

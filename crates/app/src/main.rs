@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 mod gui;
 mod print;
+mod print_shaped;
 
 #[derive(Parser)]
 #[command(name = "Abyssal Thread", about = "A Rust crochet CAD system: DSL -> stitch graph -> 3D model -> chart")]

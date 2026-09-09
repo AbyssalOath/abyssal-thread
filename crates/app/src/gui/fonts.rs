@@ -70,3 +70,33 @@ pub static FONT_FAMILIES: &[FontFamily] = &[
         bold_italic: include_bytes!("../../../assets/fonts/Roboto/static/Roboto-BoldItalic.ttf"),
     },
 ];
+
+/// Every family name font-kit can see installed on this system. Empty (not
+/// an error) if enumeration fails for any reason - the system-font
+/// dropdown just has nothing to show in that case, rather than the app
+/// failing to start.
+pub fn enumerate_system_font_families() -> Vec<String> {
+    use font_kit::source::SystemSource;
+    let mut names = SystemSource::new().all_families().unwrap_or_default();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Resolves a system family name to a loadable font file path, if font-kit
+/// can find one on disk for it (some system fonts are memory-only/embedded
+/// and have no path - `None` in that case).
+pub fn resolve_system_font_path(family_name: &str) -> Option<String> {
+    use font_kit::family_name::FamilyName;
+    use font_kit::handle::Handle;
+    use font_kit::properties::Properties;
+    use font_kit::source::SystemSource;
+
+    let handle = SystemSource::new()
+        .select_best_match(&[FamilyName::Title(family_name.to_string())], &Properties::new())
+        .ok()?;
+    match handle {
+        Handle::Path { path, .. } => Some(path.display().to_string()),
+        Handle::Memory { .. } => None,
+    }
+}

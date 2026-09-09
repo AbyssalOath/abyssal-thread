@@ -16,6 +16,7 @@ pub mod text_import;
 pub mod viewport;
 pub mod fonts;
 pub mod recent_colors;
+pub mod def_builder;
 
 use abyssal_thread_core::StitchGraph;
 use abyssal_thread_lang::Pattern;
@@ -104,6 +105,7 @@ pub struct GoblinApp {
     /// `GridState`) because it must survive across frames while `GridState`
     /// itself gets wholesale replaced on every recompile.
     edit_target: Option<grid::PendingEdit>,
+    def_builder: def_builder::DefBuilderState,
     viewport: viewport::ViewportState,
     image_import: image_import::ImageImportState,
     text_import: text_import::TextImportState,
@@ -182,6 +184,7 @@ impl Default for GoblinApp {
             graph: None,
             grid: grid::GridState::default(),
             edit_target: None,
+            def_builder: def_builder::DefBuilderState::default(),
             viewport: viewport::ViewportState::default(),
             image_import: image_import::ImageImportState::default(),
             text_import: text_import::TextImportState::default(),
@@ -455,13 +458,17 @@ impl GoblinApp {
     /// Colorwork-only, same reasoning as `export_legend`: writes the
     /// multi-page tiled pattern PDF to a user-chosen path (see `print.rs`).
     fn export_pdf(&mut self) {
-        let Some(state) = &self.colorwork else {
-            self.status = "PDF export is only available for colorwork patterns".to_string();
-            return;
-        };
         let cell_mm = self.print_cell_size_in * 25.4;
         let name = self.pattern_name.clone().unwrap_or_else(|| "pattern".to_string());
-        match crate::print::generate_pattern_pdf(&state.grid, cell_mm, &name, Path::new(&self.export_pdf_path), self.print_page_size, self.print_margin_in * 25.4) {
+        let result = if let Some(state) = &self.colorwork {
+            crate::print::generate_pattern_pdf(&state.grid, cell_mm, &name, Path::new(&self.export_pdf_path), self.print_page_size, self.print_margin_in * 25.4)
+        } else if let Some(g) = &self.graph {
+            crate::print_shaped::generate_shaped_pattern_pdf(g, cell_mm, &name, Path::new(&self.export_pdf_path), self.print_page_size, self.print_margin_in * 25.4)
+        } else {
+            self.status = "nothing compiled to export yet".to_string();
+            return;
+        };
+        match result {
             Ok(()) => self.status = format!("wrote pattern PDF to {}", self.export_pdf_path),
             Err(e) => self.status = format!("couldn't write {}: {e}", self.export_pdf_path),
         }
@@ -473,18 +480,18 @@ impl GoblinApp {
     /// than a direct "send to printer" call) is the actual reliable
     /// cross-platform approach.
     fn print_chart(&mut self) {
-        let Some(state) = &self.colorwork else {
-            self.status = "printing is only available for colorwork patterns".to_string();
-            return;
-        };
         let cell_mm = self.print_cell_size_in * 25.4;
         let name = self.pattern_name.clone().unwrap_or_else(|| "pattern".to_string());
-        match crate::print::print_via_system_default(&state.grid, cell_mm, &name, self.print_page_size, self.print_margin_in * 25.4) {
-            Ok(()) => {
-                self.status =
-                    "opened pattern PDF for printing - select Color (not Grayscale/B&W) in the print dialog"
-                        .to_string()
-            }
+        let result = if let Some(state) = &self.colorwork {
+            crate::print::print_via_system_default(&state.grid, cell_mm, &name, self.print_page_size, self.print_margin_in * 25.4)
+        } else if let Some(g) = &self.graph {
+            crate::print_shaped::print_shaped_via_system_default(g, cell_mm, &name, self.print_page_size, self.print_margin_in * 25.4)
+        } else {
+            self.status = "nothing compiled to print yet".to_string();
+            return;
+        };
+        match result {
+            Ok(()) => self.status = "opened pattern PDF for printing - select Color (not Grayscale/B&W) in the print dialog".to_string(),
             Err(e) => self.status = format!("couldn't open print dialog: {e}"),
         }
     }
@@ -630,7 +637,7 @@ impl eframe::App for GoblinApp {
                     }
                 }
                 if ui
-                    .add_enabled(self.colorwork.is_some(), egui::Button::new("Export PDF..."))
+                    .add_enabled(self.colorwork.is_some() || self.graph.is_some(), egui::Button::new("Export PDF..."))
                     .on_hover_text("Colorwork patterns only - multi-page tiled printable chart, cross-stitch-pattern style.")
                     .clicked()
                 {
@@ -661,7 +668,7 @@ impl eframe::App for GoblinApp {
                         .suffix(" in"),
                 );
                 if ui
-                    .add_enabled(self.colorwork.is_some(), egui::Button::new("Print..."))
+                    .add_enabled(self.colorwork.is_some() || self.graph.is_some(), egui::Button::new("Print..."))
                     .on_hover_text("Opens the pattern as a PDF in your default viewer, ready to print from there.")
                     .clicked()
                 {
@@ -727,6 +734,14 @@ impl eframe::App for GoblinApp {
                         }
                         self.recompile_from_dsl();
                     }
+                    ui.separator();
+                    ui.collapsing("Custom stitch builder (DEF)", |ui| {
+                        if let Some(def_line) = def_builder::show(ui, &mut self.def_builder) {
+                            self.push_history(self.dsl_source.clone());
+                            self.dsl_source = format!("{def_line}{}", self.dsl_source);
+                            self.recompile_from_dsl();
+                        }
+                    });
                 });
             }
             ViewMode::Viewport3D => {
