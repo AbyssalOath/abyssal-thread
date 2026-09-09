@@ -8,7 +8,10 @@ mod print;
 mod print_shaped;
 
 #[derive(Parser)]
-#[command(name = "Abyssal Thread", about = "A Rust crochet CAD system: DSL -> stitch graph -> 3D model -> chart")]
+#[command(
+    name = "Abyssal Thread",
+    about = "A Rust crochet CAD system: DSL -> stitch graph -> 3D model -> chart"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -68,8 +71,10 @@ fn main() -> Result<()> {
             relax_iterations,
         } => {
             let gauge = abyssal_thread_layout::Gauge {
-                sts_per_4in: gauge_sts_per_4in.unwrap_or(abyssal_thread_layout::REFERENCE_STS_PER_4IN),
-                rows_per_4in: gauge_rows_per_4in.unwrap_or(abyssal_thread_layout::REFERENCE_ROWS_PER_4IN),
+                sts_per_4in: gauge_sts_per_4in
+                    .unwrap_or(abyssal_thread_layout::REFERENCE_STS_PER_4IN),
+                rows_per_4in: gauge_rows_per_4in
+                    .unwrap_or(abyssal_thread_layout::REFERENCE_ROWS_PER_4IN),
             };
             build(input, svg, obj, tension, gauge, relax_iterations)
         }
@@ -98,7 +103,11 @@ fn build(
 
     let mut graph = abyssal_thread_lang::eval::eval(&pattern)
         .map_err(|e| anyhow::anyhow!("eval error: {e}"))?;
-    println!("Built stitch graph: {} stitches across {} round(s)", graph.stitch_count(), graph.round_count());
+    println!(
+        "Built stitch graph: {} stitches across {} round(s)",
+        graph.stitch_count(),
+        graph.round_count()
+    );
     // Currently just raw `DEF` bodies' out-of-range `%-N`/`%+N` refs - see
     // `StitchGraph::warnings`'s doc comment. Non-fatal, but worth a nudge
     // rather than vanishing with no trace.

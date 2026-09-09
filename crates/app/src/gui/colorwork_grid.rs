@@ -135,8 +135,12 @@ impl ColorworkGridState {
                 pixels.push(Color32::from_rgb(r, g, b));
             }
         }
-        let image = ColorImage { size: [self.grid.width, self.grid.height], pixels };
-        self.texture = Some(ctx.load_texture("colorwork_paint_grid", image, TextureOptions::NEAREST));
+        let image = ColorImage {
+            size: [self.grid.width, self.grid.height],
+            pixels,
+        };
+        self.texture =
+            Some(ctx.load_texture("colorwork_paint_grid", image, TextureOptions::NEAREST));
         self.texture_dirty = false;
     }
 
@@ -280,7 +284,11 @@ impl ColorworkGridState {
 /// shaped-pattern grid editor's per-stitch color picker (see
 /// `recent_colors` module doc) - colors added to this palette get recorded
 /// there too, and clicking a recent swatch here quick-adds/-selects it.
-pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crate::gui::recent_colors::RecentColors) -> bool {
+pub fn show(
+    ui: &mut egui::Ui,
+    state: &mut ColorworkGridState,
+    recent: &mut crate::gui::recent_colors::RecentColors,
+) -> bool {
     let mut modified = false;
 
     ui.heading("Canvas size");
@@ -288,18 +296,33 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
     ui.horizontal(|ui| {
         ui.label("Set size by:");
         ui.radio_value(&mut state.size_mode, SizeMode::Stitches, "Stitch count");
-        if ui.radio_value(&mut state.size_mode, SizeMode::Inches, "Finished size (inches)").clicked() {
+        if ui
+            .radio_value(
+                &mut state.size_mode,
+                SizeMode::Inches,
+                "Finished size (inches)",
+            )
+            .clicked()
+        {
             state.sync_inches_from_stitches();
         }
     });
     ui.horizontal(|ui| {
         ui.label("Gauge:");
         gauge_changed |= ui
-            .add(egui::DragValue::new(&mut state.gauge_sts_per_4in).clamp_range(1.0..=200.0).speed(0.1))
+            .add(
+                egui::DragValue::new(&mut state.gauge_sts_per_4in)
+                    .clamp_range(1.0..=200.0)
+                    .speed(0.1),
+            )
             .changed();
         ui.label("sts,");
         gauge_changed |= ui
-            .add(egui::DragValue::new(&mut state.gauge_rows_per_4in).clamp_range(1.0..=200.0).speed(0.1))
+            .add(
+                egui::DragValue::new(&mut state.gauge_rows_per_4in)
+                    .clamp_range(1.0..=200.0)
+                    .speed(0.1),
+            )
             .changed();
         ui.label("rows, per 4 inches");
     });
@@ -309,13 +332,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
         SizeMode::Stitches => {
             ui.horizontal(|ui| {
                 ui.label("Width (stitches):");
-                dims_changed |= ui.add(egui::Slider::new(&mut state.pending_width, 1..=400)).changed();
-                dims_changed |= ui.add(egui::DragValue::new(&mut state.pending_width)).changed();
+                dims_changed |= ui
+                    .add(egui::Slider::new(&mut state.pending_width, 1..=400))
+                    .changed();
+                dims_changed |= ui
+                    .add(egui::DragValue::new(&mut state.pending_width))
+                    .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Height (rows):");
-                dims_changed |= ui.add(egui::Slider::new(&mut state.pending_height, 1..=400)).changed();
-                dims_changed |= ui.add(egui::DragValue::new(&mut state.pending_height)).changed();
+                dims_changed |= ui
+                    .add(egui::Slider::new(&mut state.pending_height, 1..=400))
+                    .changed();
+                dims_changed |= ui
+                    .add(egui::DragValue::new(&mut state.pending_height))
+                    .changed();
             });
         }
         SizeMode::Inches => {
@@ -323,13 +354,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
             ui.horizontal(|ui| {
                 ui.label("Width (inches):");
                 inches_changed |= ui
-                    .add(egui::DragValue::new(&mut state.desired_width_in).clamp_range(0.5..=200.0).speed(0.1))
+                    .add(
+                        egui::DragValue::new(&mut state.desired_width_in)
+                            .clamp_range(0.5..=200.0)
+                            .speed(0.1),
+                    )
                     .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Height (inches):");
                 inches_changed |= ui
-                    .add(egui::DragValue::new(&mut state.desired_height_in).clamp_range(0.5..=200.0).speed(0.1))
+                    .add(
+                        egui::DragValue::new(&mut state.desired_height_in)
+                            .clamp_range(0.5..=200.0)
+                            .speed(0.1),
+                    )
                     .changed();
             });
             if inches_changed || gauge_changed {
@@ -350,7 +389,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
     if state.source_image.is_some() {
         ui.horizontal(|ui| {
             ui.label("Colors:");
-            colors_changed |= ui.add(egui::Slider::new(&mut state.colors, 1..=16)).changed();
+            colors_changed |= ui
+                .add(egui::Slider::new(&mut state.colors, 1..=16))
+                .changed();
         });
         if colors_changed {
             let (w, h) = (state.pending_width as usize, state.pending_height as usize);
@@ -377,7 +418,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
         for (i, &[r, g, b]) in state.palette.clone().iter().enumerate() {
             let (rect, response) =
                 ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
-            ui.painter().rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
+            ui.painter()
+                .rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
             let stroke = if i == state.selected {
                 egui::Stroke::new(2.0_f32, Color32::WHITE)
             } else {
@@ -449,8 +491,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
         return modified;
     };
 
-    let display_size =
-        egui::vec2(state.grid.width as f32 * CELL_SIZE, state.grid.height as f32 * CELL_SIZE);
+    let display_size = egui::vec2(
+        state.grid.width as f32 * CELL_SIZE,
+        state.grid.height as f32 * CELL_SIZE,
+    );
 
     egui::ScrollArea::both().show(ui, |ui| {
         let (rect, response) = ui.allocate_exact_size(display_size, egui::Sense::click_and_drag());
@@ -469,11 +513,17 @@ pub fn show(ui: &mut egui::Ui, state: &mut ColorworkGridState, recent: &mut crat
         let line_stroke = egui::Stroke::new(1.0_f32, Color32::from_black_alpha(60));
         for col in 0..=state.grid.width {
             let x = rect.min.x + col as f32 * CELL_SIZE;
-            ui.painter().line_segment([egui::pos2(x, rect.min.y), egui::pos2(x, rect.max.y)], line_stroke);
+            ui.painter().line_segment(
+                [egui::pos2(x, rect.min.y), egui::pos2(x, rect.max.y)],
+                line_stroke,
+            );
         }
         for row in 0..=state.grid.height {
             let y = rect.min.y + row as f32 * CELL_SIZE;
-            ui.painter().line_segment([egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y)], line_stroke);
+            ui.painter().line_segment(
+                [egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y)],
+                line_stroke,
+            );
         }
 
         let pointer_down = ui.input(|i| i.pointer.primary_down());

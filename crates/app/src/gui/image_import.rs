@@ -158,7 +158,10 @@ impl ImageImportState {
                 pixels.push(Color32::from_rgb(r, g, b));
             }
         }
-        let color_image = ColorImage { size: [grid.width, grid.height], pixels };
+        let color_image = ColorImage {
+            size: [grid.width, grid.height],
+            pixels,
+        };
         let texture = ctx.load_texture("colorwork_preview", color_image, TextureOptions::NEAREST);
         self.preview_texture = Some(texture);
     }
@@ -231,7 +234,14 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     ui.horizontal(|ui| {
         ui.label("Set size by:");
         ui.radio_value(&mut state.size_mode, SizeMode::Stitches, "Stitch count");
-        if ui.radio_value(&mut state.size_mode, SizeMode::Inches, "Finished size (inches)").clicked() {
+        if ui
+            .radio_value(
+                &mut state.size_mode,
+                SizeMode::Inches,
+                "Finished size (inches)",
+            )
+            .clicked()
+        {
             state.sync_inches_from_stitches();
         }
     });
@@ -254,21 +264,31 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
         SizeMode::Stitches => {
             ui.horizontal(|ui| {
                 ui.label("Width (stitches):");
-                changed |= ui.add(egui::Slider::new(&mut state.width, 1..=400)).changed();
+                changed |= ui
+                    .add(egui::Slider::new(&mut state.width, 1..=400))
+                    .changed();
                 changed |= ui.add(egui::DragValue::new(&mut state.width)).changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Height (rows):");
                 let enabled = !state.lock_aspect;
-                changed |= ui.add_enabled(enabled, egui::Slider::new(&mut state.height, 1..=400)).changed();
-                changed |= ui.add_enabled(enabled, egui::DragValue::new(&mut state.height)).changed();
+                changed |= ui
+                    .add_enabled(enabled, egui::Slider::new(&mut state.height, 1..=400))
+                    .changed();
+                changed |= ui
+                    .add_enabled(enabled, egui::DragValue::new(&mut state.height))
+                    .changed();
             });
         }
         SizeMode::Inches => {
             ui.horizontal(|ui| {
                 ui.label("Width (inches):");
                 changed |= ui
-                    .add(egui::DragValue::new(&mut state.desired_width_in).clamp_range(0.5..=200.0).speed(0.1))
+                    .add(
+                        egui::DragValue::new(&mut state.desired_width_in)
+                            .clamp_range(0.5..=200.0)
+                            .speed(0.1),
+                    )
                     .changed();
             });
             ui.horizontal(|ui| {
@@ -277,7 +297,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
                 changed |= ui
                     .add_enabled(
                         enabled,
-                        egui::DragValue::new(&mut state.desired_height_in).clamp_range(0.5..=200.0).speed(0.1),
+                        egui::DragValue::new(&mut state.desired_height_in)
+                            .clamp_range(0.5..=200.0)
+                            .speed(0.1),
                     )
                     .changed();
             });
@@ -287,7 +309,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
         }
     }
 
-    changed |= ui.checkbox(&mut state.lock_aspect, "Lock aspect ratio to source image").changed();
+    changed |= ui
+        .checkbox(&mut state.lock_aspect, "Lock aspect ratio to source image")
+        .changed();
 
     if let Some(grid) = &state.grid {
         let est_w_in = grid.width as f32 / state.sts_per_in();
@@ -306,21 +330,31 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     ui.heading("Colors");
     ui.horizontal(|ui| {
         ui.label("Number of colors:");
-        changed |= ui.add(egui::Slider::new(&mut state.colors, 1..=16)).changed();
+        changed |= ui
+            .add(egui::Slider::new(&mut state.colors, 1..=16))
+            .changed();
     });
     ui.horizontal(|ui| {
         ui.label("Resize style:");
         changed |= ui
-            .radio_value(&mut state.filter, ResizeFilter::Nearest, "Crisp (logos/text)")
+            .radio_value(
+                &mut state.filter,
+                ResizeFilter::Nearest,
+                "Crisp (logos/text)",
+            )
             .changed();
-        changed |= ui.radio_value(&mut state.filter, ResizeFilter::Smooth, "Smooth (photos)").changed();
+        changed |= ui
+            .radio_value(&mut state.filter, ResizeFilter::Smooth, "Smooth (photos)")
+            .changed();
     });
     if let Some(grid) = &state.grid {
         ui.horizontal_wrapped(|ui| {
             ui.label("Palette:");
             for [r, g, b] in grid.palette() {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
-                ui.painter().rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                ui.painter()
+                    .rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
             }
         });
     }

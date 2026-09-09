@@ -18,12 +18,12 @@
 //! whole block as one unit) - so "MERCI POUR LE" / "VENIN" centers each
 //! line on its own, matching how the reference image was laid out.
 
-use crate::gui::image_import::GridImportPayload;
 use crate::gui::fonts::FONT_FAMILIES;
+use crate::gui::image_import::GridImportPayload;
+use ab_glyph::{FontArc, PxScale};
 use abyssal_thread_core::ColorGrid;
 use abyssal_thread_imageimport::{quantize, resize_exact, resize_preserving_aspect, ResizeFilter};
 use eframe::egui::{self, Color32, ColorImage, TextureHandle, TextureOptions};
-use ab_glyph::{FontArc, PxScale};
 use image::{DynamicImage, Rgba, RgbaImage};
 use imageproc::drawing::{draw_text_mut, text_size};
 
@@ -101,10 +101,20 @@ impl Default for TextImportState {
 
 /// Renders `text` (split on `\n` into lines) onto a canvas sized to fit,
 /// each line independently horizontally centered.
-fn render_text_image(text: &str, font: &FontArc, font_size: f32, fg: [u8; 3], bg: [u8; 3]) -> DynamicImage {
+fn render_text_image(
+    text: &str,
+    font: &FontArc,
+    font_size: f32,
+    fg: [u8; 3],
+    bg: [u8; 3],
+) -> DynamicImage {
     let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
     if lines.is_empty() {
-        return DynamicImage::ImageRgba8(RgbaImage::from_pixel(1, 1, Rgba([bg[0], bg[1], bg[2], 255])));
+        return DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+            1,
+            1,
+            Rgba([bg[0], bg[1], bg[2], 255]),
+        ));
     }
 
     let scale = PxScale::from(font_size);
@@ -141,7 +151,10 @@ fn render_text_image(text: &str, font: &FontArc, font_size: f32, fg: [u8; 3], bg
 impl TextImportState {
     fn reload_font(&mut self) {
         if let Some(path) = self.custom_font_path.clone() {
-            match std::fs::read(&path).ok().and_then(|bytes| FontArc::try_from_vec(bytes).ok()) {
+            match std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| FontArc::try_from_vec(bytes).ok())
+            {
                 Some(font) => {
                     self.font = Some(font);
                     self.status.clear();
@@ -163,7 +176,13 @@ impl TextImportState {
 
     fn render_and_recompute(&mut self) {
         let Some(font) = &self.font else { return };
-        self.rendered = Some(render_text_image(&self.text, font, self.render_font_size, self.fg_color, self.bg_color));
+        self.rendered = Some(render_text_image(
+            &self.text,
+            font,
+            self.render_font_size,
+            self.fg_color,
+            self.bg_color,
+        ));
         self.recompute();
     }
 
@@ -212,8 +231,12 @@ impl TextImportState {
                 pixels.push(Color32::from_rgb(r, g, b));
             }
         }
-        let color_image = ColorImage { size: [grid.width, grid.height], pixels };
-        self.preview_texture = Some(ctx.load_texture("text_import_preview", color_image, TextureOptions::NEAREST));
+        let color_image = ColorImage {
+            size: [grid.width, grid.height],
+            pixels,
+        };
+        self.preview_texture =
+            Some(ctx.load_texture("text_import_preview", color_image, TextureOptions::NEAREST));
     }
 }
 
@@ -229,7 +252,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
             .selected_text(current_name)
             .show_ui(ui, |ui| {
                 for (i, family) in FONT_FAMILIES.iter().enumerate() {
-                    if ui.selectable_value(&mut state.selected_family, i, family.name).changed() {
+                    if ui
+                        .selectable_value(&mut state.selected_family, i, family.name)
+                        .changed()
+                    {
                         changed = true;
                     }
                 }
@@ -240,7 +266,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
 
     ui.horizontal(|ui| {
         if ui.button("Use a custom font file...").clicked() {
-            if let Some(path) = rfd::FileDialog::new().add_filter("Font", &["ttf", "otf"]).pick_file() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Font", &["ttf", "otf"])
+                .pick_file()
+            {
                 state.custom_font_path = Some(path.display().to_string());
                 changed = true;
             }
@@ -289,7 +318,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
 
     ui.separator();
     ui.label("Text (one line per row of the pattern - each line is centered independently):");
-    changed |= ui.add(egui::TextEdit::multiline(&mut state.text).desired_rows(3)).changed();
+    changed |= ui
+        .add(egui::TextEdit::multiline(&mut state.text).desired_rows(3))
+        .changed();
 
     ui.horizontal(|ui| {
         ui.label("Text color:");
@@ -316,15 +347,34 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
     ui.horizontal(|ui| {
         ui.label("Set size by:");
         ui.radio_value(&mut state.size_mode, SizeMode::Stitches, "Stitch count");
-        if ui.radio_value(&mut state.size_mode, SizeMode::Inches, "Finished size (inches)").clicked() {
+        if ui
+            .radio_value(
+                &mut state.size_mode,
+                SizeMode::Inches,
+                "Finished size (inches)",
+            )
+            .clicked()
+        {
             state.sync_inches_from_stitches();
         }
     });
     ui.horizontal(|ui| {
         ui.label("Gauge:");
-        size_changed |= ui.add(egui::DragValue::new(&mut state.gauge_sts_per_4in).clamp_range(1.0..=200.0).speed(0.1)).changed();
+        size_changed |= ui
+            .add(
+                egui::DragValue::new(&mut state.gauge_sts_per_4in)
+                    .clamp_range(1.0..=200.0)
+                    .speed(0.1),
+            )
+            .changed();
         ui.label("sts,");
-        size_changed |= ui.add(egui::DragValue::new(&mut state.gauge_rows_per_4in).clamp_range(1.0..=200.0).speed(0.1)).changed();
+        size_changed |= ui
+            .add(
+                egui::DragValue::new(&mut state.gauge_rows_per_4in)
+                    .clamp_range(1.0..=200.0)
+                    .speed(0.1),
+            )
+            .changed();
         ui.label("rows, per 4 inches");
     });
 
@@ -332,41 +382,68 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
         SizeMode::Stitches => {
             ui.horizontal(|ui| {
                 ui.label("Width (stitches):");
-                size_changed |= ui.add(egui::Slider::new(&mut state.width, 1..=400)).changed();
+                size_changed |= ui
+                    .add(egui::Slider::new(&mut state.width, 1..=400))
+                    .changed();
                 size_changed |= ui.add(egui::DragValue::new(&mut state.width)).changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Height (rows):");
                 let enabled = !state.lock_aspect;
-                size_changed |= ui.add_enabled(enabled, egui::Slider::new(&mut state.height, 1..=400)).changed();
-                size_changed |= ui.add_enabled(enabled, egui::DragValue::new(&mut state.height)).changed();
+                size_changed |= ui
+                    .add_enabled(enabled, egui::Slider::new(&mut state.height, 1..=400))
+                    .changed();
+                size_changed |= ui
+                    .add_enabled(enabled, egui::DragValue::new(&mut state.height))
+                    .changed();
             });
         }
         SizeMode::Inches => {
             ui.horizontal(|ui| {
                 ui.label("Width (inches):");
-                size_changed |= ui.add(egui::DragValue::new(&mut state.desired_width_in).clamp_range(0.5..=200.0).speed(0.1)).changed();
+                size_changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut state.desired_width_in)
+                            .clamp_range(0.5..=200.0)
+                            .speed(0.1),
+                    )
+                    .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Height (inches):");
                 let enabled = !state.lock_aspect;
-                size_changed |= ui.add_enabled(enabled, egui::DragValue::new(&mut state.desired_height_in).clamp_range(0.5..=200.0).speed(0.1)).changed();
+                size_changed |= ui
+                    .add_enabled(
+                        enabled,
+                        egui::DragValue::new(&mut state.desired_height_in)
+                            .clamp_range(0.5..=200.0)
+                            .speed(0.1),
+                    )
+                    .changed();
             });
             if size_changed {
                 state.apply_gauge_size();
             }
         }
     }
-    size_changed |= ui.checkbox(&mut state.lock_aspect, "Lock aspect ratio").changed();
+    size_changed |= ui
+        .checkbox(&mut state.lock_aspect, "Lock aspect ratio")
+        .changed();
 
     ui.horizontal(|ui| {
         ui.label("Number of colors:");
-        size_changed |= ui.add(egui::Slider::new(&mut state.colors, 1..=16)).changed();
+        size_changed |= ui
+            .add(egui::Slider::new(&mut state.colors, 1..=16))
+            .changed();
     });
     ui.horizontal(|ui| {
         ui.label("Resize style:");
-        size_changed |= ui.radio_value(&mut state.filter, ResizeFilter::Nearest, "Crisp").changed();
-        size_changed |= ui.radio_value(&mut state.filter, ResizeFilter::Smooth, "Smooth").changed();
+        size_changed |= ui
+            .radio_value(&mut state.filter, ResizeFilter::Nearest, "Crisp")
+            .changed();
+        size_changed |= ui
+            .radio_value(&mut state.filter, ResizeFilter::Smooth, "Smooth")
+            .changed();
     });
 
     if size_changed {

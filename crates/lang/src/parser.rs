@@ -136,7 +136,10 @@ impl Parser {
         }
         // A round ends at newline or eof.
         if !matches!(self.peek(), Token::Newline | Token::Eof) {
-            return Err(ParseError::UnexpectedToken(format!("{:?}", self.peek()), self.line()));
+            return Err(ParseError::UnexpectedToken(
+                format!("{:?}", self.peek()),
+                self.line(),
+            ));
         }
         Ok(Round { ops })
     }
@@ -164,7 +167,10 @@ impl Parser {
                 if let Token::Number(n) = self.peek().clone() {
                     let line = self.line();
                     self.advance();
-                    Ok(Op::Repeat { body, times: check_count(n, line)? })
+                    Ok(Op::Repeat {
+                        body,
+                        times: check_count(n, line)?,
+                    })
                 } else {
                     Err(ParseError::UnexpectedEof("repeat count after '*'"))
                 }
@@ -175,7 +181,10 @@ impl Parser {
                 self.parse_stitch_term(Some(check_count(n, line)?))
             }
             Token::Ident(_) => self.parse_stitch_term(None),
-            other => Err(ParseError::UnexpectedToken(format!("{:?}", other), self.line())),
+            other => Err(ParseError::UnexpectedToken(
+                format!("{:?}", other),
+                self.line(),
+            )),
         }
     }
 
@@ -183,7 +192,12 @@ impl Parser {
     fn parse_stitch_term(&mut self, count: Option<u32>) -> Result<Op, ParseError> {
         let first = match self.advance() {
             Token::Ident(s) => s,
-            other => return Err(ParseError::UnexpectedToken(format!("{:?}", other), self.line())),
+            other => {
+                return Err(ParseError::UnexpectedToken(
+                    format!("{:?}", other),
+                    self.line(),
+                ))
+            }
         };
 
         // `label!` - a bare identifier immediately followed by '!' is a label,
@@ -209,7 +223,12 @@ impl Parser {
             self.advance(); // consume '.'
             let base = match self.advance() {
                 Token::Ident(s) => s,
-                other => return Err(ParseError::UnexpectedToken(format!("{:?}", other), self.line())),
+                other => {
+                    return Err(ParseError::UnexpectedToken(
+                        format!("{:?}", other),
+                        self.line(),
+                    ))
+                }
             };
             (Some(m), base)
         } else {
@@ -223,7 +242,12 @@ impl Parser {
             None
         };
 
-        Ok(Op::Stitch { modifier, abbrev, count: count.unwrap_or(1), color })
+        Ok(Op::Stitch {
+            modifier,
+            abbrev,
+            count: count.unwrap_or(1),
+            color,
+        })
     }
 }
 
@@ -238,7 +262,12 @@ mod tests {
         assert_eq!(p.rounds.len(), 1);
         assert_eq!(
             p.rounds[0].ops,
-            vec![Op::Stitch { modifier: None, abbrev: "sc".into(), color: None, count: 8 }]
+            vec![Op::Stitch {
+                modifier: None,
+                abbrev: "sc".into(),
+                color: None,
+                count: 8
+            }]
         );
     }
 
@@ -247,7 +276,12 @@ mod tests {
         let p = parse("sc\n").unwrap();
         assert_eq!(
             p.rounds[0].ops,
-            vec![Op::Stitch { modifier: None, abbrev: "sc".into(), color: None, count: 1 }]
+            vec![Op::Stitch {
+                modifier: None,
+                abbrev: "sc".into(),
+                color: None,
+                count: 1
+            }]
         );
     }
 
@@ -276,14 +310,18 @@ mod tests {
     fn parses_loop_and_post_modifiers() {
         let p = parse("flo.sc, bpost.dc\n").unwrap();
         match &p.rounds[0].ops[0] {
-            Op::Stitch { modifier, abbrev, .. } => {
+            Op::Stitch {
+                modifier, abbrev, ..
+            } => {
                 assert_eq!(*modifier, Some(Modifier::FrontLoopOnly));
                 assert_eq!(abbrev, "sc");
             }
             other => panic!("unexpected {other:?}"),
         }
         match &p.rounds[0].ops[1] {
-            Op::Stitch { modifier, abbrev, .. } => {
+            Op::Stitch {
+                modifier, abbrev, ..
+            } => {
                 assert_eq!(*modifier, Some(Modifier::BackPost));
                 assert_eq!(abbrev, "dc");
             }
@@ -298,14 +336,22 @@ mod tests {
         assert_eq!(p.rounds.len(), 1);
         assert_eq!(
             p.rounds[0].ops,
-            vec![Op::Stitch { modifier: None, abbrev: "sc".into(), color: None, count: 6 }]
+            vec![Op::Stitch {
+                modifier: None,
+                abbrev: "sc".into(),
+                color: None,
+                count: 6
+            }]
         );
     }
 
     #[test]
     fn captures_def_line_verbatim() {
         let p = parse("DEF: shell = 3dc, ch1\n6sc\n").unwrap();
-        assert_eq!(p.definitions, vec![("shell".to_string(), "3dc, ch1".to_string())]);
+        assert_eq!(
+            p.definitions,
+            vec![("shell".to_string(), "3dc, ch1".to_string())]
+        );
     }
 
     #[test]
@@ -339,8 +385,18 @@ mod tests {
         assert_eq!(
             ops,
             vec![
-                Op::Stitch { modifier: None, abbrev: "dc".into(), color: None, count: 3 },
-                Op::Stitch { modifier: None, abbrev: "ch1".into(), color: None, count: 1 },
+                Op::Stitch {
+                    modifier: None,
+                    abbrev: "dc".into(),
+                    color: None,
+                    count: 3
+                },
+                Op::Stitch {
+                    modifier: None,
+                    abbrev: "ch1".into(),
+                    color: None,
+                    count: 1
+                },
             ]
         );
     }

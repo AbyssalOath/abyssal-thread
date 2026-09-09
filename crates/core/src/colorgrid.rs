@@ -22,7 +22,11 @@ pub struct ColorGrid {
 
 impl ColorGrid {
     pub fn new(width: usize, height: usize, fill: [u8; 3]) -> Self {
-        Self { width, height, cells: vec![fill; width * height] }
+        Self {
+            width,
+            height,
+            cells: vec![fill; width * height],
+        }
     }
 
     pub fn get(&self, x: usize, y: usize) -> [u8; 3] {

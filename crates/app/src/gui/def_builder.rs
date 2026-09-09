@@ -18,7 +18,12 @@ pub struct DefBuilderState {
 
 impl Default for DefBuilderState {
     fn default() -> Self {
-        Self { name: String::new(), ops: Vec::new(), new_count: 1, new_abbrev_idx: 0 }
+        Self {
+            name: String::new(),
+            ops: Vec::new(),
+            new_count: 1,
+            new_abbrev_idx: 0,
+        }
     }
 }
 
@@ -77,17 +82,26 @@ pub fn show(ui: &mut egui::Ui, state: &mut DefBuilderState) -> Option<String> {
                 }
             });
         if ui.button("+ Add stitch").clicked() {
-            state.ops.push((state.new_count, KNOWN_ABBREVS[state.new_abbrev_idx].to_string()));
+            state.ops.push((
+                state.new_count,
+                KNOWN_ABBREVS[state.new_abbrev_idx].to_string(),
+            ));
         }
     });
 
     let name_valid = is_valid_def_name(&state.name);
     if !name_valid && !state.name.is_empty() {
-        ui.colored_label(egui::Color32::from_rgb(220, 90, 90), "Name must be letters/digits/underscore only.");
+        ui.colored_label(
+            egui::Color32::from_rgb(220, 90, 90),
+            "Name must be letters/digits/underscore only.",
+        );
     }
 
     let can_insert = name_valid && !state.ops.is_empty();
-    if ui.add_enabled(can_insert, egui::Button::new("Insert DEF into DSL")).clicked() {
+    if ui
+        .add_enabled(can_insert, egui::Button::new("Insert DEF into DSL"))
+        .clicked()
+    {
         result = Some(format_def_line(&state.name, &state.ops));
         state.name.clear();
         state.ops.clear();
@@ -152,7 +166,11 @@ mod tests {
         let ops = vec![(3u32, "dc".to_string()), (1u32, "ch".to_string())];
         let line = format_def_line("shell", &ops);
         let src = format!("{line}6sc\n");
-        let pattern = abyssal_thread_lang::parser::parse(&src).expect("builder output should parse");
-        assert_eq!(pattern.definitions, vec![("shell".to_string(), "3dc, 1ch".to_string())]);
+        let pattern =
+            abyssal_thread_lang::parser::parse(&src).expect("builder output should parse");
+        assert_eq!(
+            pattern.definitions,
+            vec![("shell".to_string(), "3dc, 1ch".to_string())]
+        );
     }
 }

@@ -10,13 +10,13 @@
 //! safety net for that, not a fix for it.
 
 pub mod colorwork_grid;
+pub mod def_builder;
+pub mod fonts;
 pub mod grid;
 pub mod image_import;
+pub mod recent_colors;
 pub mod text_import;
 pub mod viewport;
-pub mod fonts;
-pub mod recent_colors;
-pub mod def_builder;
 
 use abyssal_thread_core::StitchGraph;
 use abyssal_thread_lang::Pattern;
@@ -86,8 +86,12 @@ pub fn run(initial_input: Option<PathBuf>) -> anyhow::Result<()> {
     }
 
     let native_options = eframe::NativeOptions::default();
-    eframe::run_native("abyssal-thread", native_options, Box::new(|_cc| Box::new(app)))
-        .map_err(|e| anyhow::anyhow!("gui error: {e}"))
+    eframe::run_native(
+        "abyssal-thread",
+        native_options,
+        Box::new(|_cc| Box::new(app)),
+    )
+    .map_err(|e| anyhow::anyhow!("gui error: {e}"))
 }
 
 pub struct GoblinApp {
@@ -263,9 +267,10 @@ impl GoblinApp {
                                     existing.mark_texture_dirty();
                                 }
                                 None => {
-                                    self.colorwork = Some(
-                                        colorwork_grid::ColorworkGridState::from_grid(color_grid.clone()),
-                                    );
+                                    self.colorwork =
+                                        Some(colorwork_grid::ColorworkGridState::from_grid(
+                                            color_grid.clone(),
+                                        ));
                                 }
                             }
                         } else {
@@ -274,7 +279,11 @@ impl GoblinApp {
                                 rows_per_4in: self.shaped_gauge_rows_per_4in,
                             };
                             abyssal_thread_layout::layout_ring(&mut g, gauge);
-                            abyssal_thread_layout::relax(&mut g, gauge, self.shaped_relax_iterations);
+                            abyssal_thread_layout::relax(
+                                &mut g,
+                                gauge,
+                                self.shaped_relax_iterations,
+                            );
                             abyssal_thread_layout::analyze_tension(&mut g, gauge);
                             self.grid = grid::GridState::from_graph(&g);
                             self.colorwork = None;
@@ -459,11 +468,28 @@ impl GoblinApp {
     /// multi-page tiled pattern PDF to a user-chosen path (see `print.rs`).
     fn export_pdf(&mut self) {
         let cell_mm = self.print_cell_size_in * 25.4;
-        let name = self.pattern_name.clone().unwrap_or_else(|| "pattern".to_string());
+        let name = self
+            .pattern_name
+            .clone()
+            .unwrap_or_else(|| "pattern".to_string());
         let result = if let Some(state) = &self.colorwork {
-            crate::print::generate_pattern_pdf(&state.grid, cell_mm, &name, Path::new(&self.export_pdf_path), self.print_page_size, self.print_margin_in * 25.4)
+            crate::print::generate_pattern_pdf(
+                &state.grid,
+                cell_mm,
+                &name,
+                Path::new(&self.export_pdf_path),
+                self.print_page_size,
+                self.print_margin_in * 25.4,
+            )
         } else if let Some(g) = &self.graph {
-            crate::print_shaped::generate_shaped_pattern_pdf(g, cell_mm, &name, Path::new(&self.export_pdf_path), self.print_page_size, self.print_margin_in * 25.4)
+            crate::print_shaped::generate_shaped_pattern_pdf(
+                g,
+                cell_mm,
+                &name,
+                Path::new(&self.export_pdf_path),
+                self.print_page_size,
+                self.print_margin_in * 25.4,
+            )
         } else {
             self.status = "nothing compiled to export yet".to_string();
             return;
@@ -481,11 +507,26 @@ impl GoblinApp {
     /// cross-platform approach.
     fn print_chart(&mut self) {
         let cell_mm = self.print_cell_size_in * 25.4;
-        let name = self.pattern_name.clone().unwrap_or_else(|| "pattern".to_string());
+        let name = self
+            .pattern_name
+            .clone()
+            .unwrap_or_else(|| "pattern".to_string());
         let result = if let Some(state) = &self.colorwork {
-            crate::print::print_via_system_default(&state.grid, cell_mm, &name, self.print_page_size, self.print_margin_in * 25.4)
+            crate::print::print_via_system_default(
+                &state.grid,
+                cell_mm,
+                &name,
+                self.print_page_size,
+                self.print_margin_in * 25.4,
+            )
         } else if let Some(g) = &self.graph {
-            crate::print_shaped::print_shaped_via_system_default(g, cell_mm, &name, self.print_page_size, self.print_margin_in * 25.4)
+            crate::print_shaped::print_shaped_via_system_default(
+                g,
+                cell_mm,
+                &name,
+                self.print_page_size,
+                self.print_margin_in * 25.4,
+            )
         } else {
             self.status = "nothing compiled to print yet".to_string();
             return;
@@ -553,7 +594,8 @@ impl eframe::App for GoblinApp {
             ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
         let redo_pressed = ctx.input(|i| {
             i.modifiers.command
-                && ((i.key_pressed(egui::Key::Z) && i.modifiers.shift) || i.key_pressed(egui::Key::Y))
+                && ((i.key_pressed(egui::Key::Z) && i.modifiers.shift)
+                    || i.key_pressed(egui::Key::Y))
         });
         if undo_pressed {
             self.undo();
@@ -682,7 +724,11 @@ impl eframe::App for GoblinApp {
                 ui.selectable_value(&mut self.view_mode, ViewMode::Grid, "\u{1F9F6} Grid");
                 ui.selectable_value(&mut self.view_mode, ViewMode::Viewport3D, "\u{1F9CA} 3D");
                 ui.selectable_value(&mut self.view_mode, ViewMode::Dsl, "\u{1F4DD} DSL");
-                ui.selectable_value(&mut self.view_mode, ViewMode::ImageImport, "\u{1F5BC} Image import");
+                ui.selectable_value(
+                    &mut self.view_mode,
+                    ViewMode::ImageImport,
+                    "\u{1F5BC} Image import",
+                );
                 ui.selectable_value(&mut self.view_mode, ViewMode::TextImport, "\u{1F524} Text");
             });
         });
@@ -753,9 +799,12 @@ impl eframe::App for GoblinApp {
                             self.viewport = viewport::ViewportState::default();
                         }
                     });
-                    if let Some(clicked) =
-                        viewport::show(ui, self.graph.as_ref(), &mut self.viewport, &self.selected_nodes)
-                    {
+                    if let Some(clicked) = viewport::show(
+                        ui,
+                        self.graph.as_ref(),
+                        &mut self.viewport,
+                        &self.selected_nodes,
+                    ) {
                         self.selected_nodes = vec![clicked];
                     }
                 });
@@ -782,7 +831,8 @@ impl eframe::App for GoblinApp {
                     if self.colorwork.is_some() {
                         ui.heading("Colorwork grid editor");
                         if let Some(state) = &mut self.colorwork {
-                            colorwork_modified = colorwork_grid::show(ui, state, &mut self.recent_colors);
+                            colorwork_modified =
+                                colorwork_grid::show(ui, state, &mut self.recent_colors);
                         }
                     } else {
                         ui.heading("Grid editor");

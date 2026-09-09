@@ -50,8 +50,13 @@ impl RecentColors {
             for &[r, g, b] in &self.colors {
                 let (rect, response) =
                     ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
-                ui.painter().rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
-                ui.painter().rect_stroke(rect, 2.0, egui::Stroke::new(1.0_f32, Color32::from_gray(120)));
+                ui.painter()
+                    .rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
+                ui.painter().rect_stroke(
+                    rect,
+                    2.0,
+                    egui::Stroke::new(1.0_f32, Color32::from_gray(120)),
+                );
                 if response.clicked() {
                     picked = Some([r, g, b]);
                 }

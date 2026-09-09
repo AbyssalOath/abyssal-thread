@@ -14,13 +14,22 @@ pub enum Token {
     Colon,
     Equals,
     /// A full `DEF: name = ...` line, captured verbatim after `=`.
-    DefLine { name: String, body: String },
+    DefLine {
+        name: String,
+        body: String,
+    },
     /// `COLORGRID: WxH` header, starting an image-derived colorwork block.
-    ColorGridHeader { width: u32, height: u32 },
+    ColorGridHeader {
+        width: u32,
+        height: u32,
+    },
     /// `ROW n: <hex> <hex> ...` - one row of a colorwork block. `hex`
     /// entries are bare 6-digit hex colors (no leading `#`, deliberately -
     /// `#` already means "comment to end of line" in this grammar).
-    ColorRow { index: u32, hex: Vec<[u8; 3]> },
+    ColorRow {
+        index: u32,
+        hex: Vec<[u8; 3]>,
+    },
     HexColor([u8; 3]),
     Newline,
     Eof,
@@ -45,7 +54,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
         };
 
         if content.is_empty() {
-            tokens.push(Spanned { token: Token::Newline, line });
+            tokens.push(Spanned {
+                token: Token::Newline,
+                line,
+            });
             continue;
         }
 
@@ -67,13 +79,23 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
                 .trim()
                 .parse()
                 .map_err(|_| ParseError::InvalidNumber(h_str.trim().to_string(), line))?;
-            tokens.push(Spanned { token: Token::ColorGridHeader { width, height }, line });
-            tokens.push(Spanned { token: Token::Newline, line });
+            tokens.push(Spanned {
+                token: Token::ColorGridHeader { width, height },
+                line,
+            });
+            tokens.push(Spanned {
+                token: Token::Newline,
+                line,
+            });
             continue;
         }
 
         // `ROW n: <hex> <hex> ...` - one row of a colorwork block.
-        if content.starts_with("ROW") && content[3..].trim_start().starts_with(|c: char| c.is_ascii_digit()) {
+        if content.starts_with("ROW")
+            && content[3..]
+                .trim_start()
+                .starts_with(|c: char| c.is_ascii_digit())
+        {
             let rest = content[3..].trim_start();
             let (num_str, hex_str) = rest
                 .split_once(':')
@@ -95,8 +117,14 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
                     (value & 0xFF) as u8,
                 ]);
             }
-            tokens.push(Spanned { token: Token::ColorRow { index, hex }, line });
-            tokens.push(Spanned { token: Token::Newline, line });
+            tokens.push(Spanned {
+                token: Token::ColorRow { index, hex },
+                line,
+            });
+            tokens.push(Spanned {
+                token: Token::Newline,
+                line,
+            });
             continue;
         }
 
@@ -113,7 +141,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
                 },
                 line,
             });
-            tokens.push(Spanned { token: Token::Newline, line });
+            tokens.push(Spanned {
+                token: Token::Newline,
+                line,
+            });
             continue;
         }
 
@@ -125,39 +156,66 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
                 }
                 ',' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::Comma, line });
+                    tokens.push(Spanned {
+                        token: Token::Comma,
+                        line,
+                    });
                 }
                 '*' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::Star, line });
+                    tokens.push(Spanned {
+                        token: Token::Star,
+                        line,
+                    });
                 }
                 '.' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::Dot, line });
+                    tokens.push(Spanned {
+                        token: Token::Dot,
+                        line,
+                    });
                 }
                 '(' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::LParen, line });
+                    tokens.push(Spanned {
+                        token: Token::LParen,
+                        line,
+                    });
                 }
                 ')' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::RParen, line });
+                    tokens.push(Spanned {
+                        token: Token::RParen,
+                        line,
+                    });
                 }
                 '!' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::Bang, line });
+                    tokens.push(Spanned {
+                        token: Token::Bang,
+                        line,
+                    });
                 }
                 '@' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::At, line });
+                    tokens.push(Spanned {
+                        token: Token::At,
+                        line,
+                    });
                 }
                 ':' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::Colon, line });
+                    tokens.push(Spanned {
+                        token: Token::Colon,
+                        line,
+                    });
                 }
                 '=' => {
                     chars.next();
-                    tokens.push(Spanned { token: Token::Equals, line });
+                    tokens.push(Spanned {
+                        token: Token::Equals,
+                        line,
+                    });
                 }
                 '~' => {
                     chars.next();
@@ -198,7 +256,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
                     let n = num
                         .parse::<u32>()
                         .map_err(|_| ParseError::InvalidNumber(num.clone(), line))?;
-                    tokens.push(Spanned { token: Token::Number(n), line });
+                    tokens.push(Spanned {
+                        token: Token::Number(n),
+                        line,
+                    });
                 }
                 c if c.is_alphabetic() || c == '_' => {
                     let mut ident = String::new();
@@ -210,13 +271,22 @@ pub fn tokenize(src: &str) -> Result<Vec<Spanned>, ParseError> {
                             break;
                         }
                     }
-                    tokens.push(Spanned { token: Token::Ident(ident), line });
+                    tokens.push(Spanned {
+                        token: Token::Ident(ident),
+                        line,
+                    });
                 }
                 other => return Err(ParseError::UnexpectedChar(other, line)),
             }
         }
-        tokens.push(Spanned { token: Token::Newline, line });
+        tokens.push(Spanned {
+            token: Token::Newline,
+            line,
+        });
     }
-    tokens.push(Spanned { token: Token::Eof, line: 0 });
+    tokens.push(Spanned {
+        token: Token::Eof,
+        line: 0,
+    });
     Ok(tokens)
 }

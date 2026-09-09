@@ -71,7 +71,9 @@ pub fn export_color_grid_legend(grid: &ColorGrid) -> String {
     ));
 
     for y in 0..grid.height {
-        let row: String = (0..grid.width).map(|x| symbol_for(grid.get(x, y))).collect();
+        let row: String = (0..grid.width)
+            .map(|x| symbol_for(grid.get(x, y)))
+            .collect();
         out.push_str(&format!("Row {}: {row}\n", y + 1));
     }
     out
@@ -117,4 +119,3 @@ mod tests {
         assert!(svg.contains(r#"y="14" width="14" height="14" fill="rgb(0,0,255)""#));
     }
 }
-

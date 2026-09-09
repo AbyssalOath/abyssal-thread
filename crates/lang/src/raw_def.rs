@@ -77,7 +77,11 @@ pub enum RawOp {
     /// behind the cursor (`None` = fall back to the normal positional
     /// parent, same as a plain `Stitch`), plus extra `Parent` edges into
     /// every resolved entry in `refs`.
-    RelativeStitch { abbrev: String, back: Option<u32>, refs: Vec<RawAttachRef> },
+    RelativeStitch {
+        abbrev: String,
+        back: Option<u32>,
+        refs: Vec<RawAttachRef>,
+    },
 }
 
 /// Whether a `DEF` body should be parsed as raw stitch geometry rather than
@@ -128,7 +132,9 @@ fn parse_raw_term(term: &str) -> Result<RawOp, ParseError> {
         let rest = &rest[1..]; // skip '@'
         let abbrev = abbrev_part.trim().to_string();
         if abbrev.is_empty() {
-            return Err(ParseError::UnexpectedEof("stitch abbreviation before '@' in raw DEF body"));
+            return Err(ParseError::UnexpectedEof(
+                "stitch abbreviation before '@' in raw DEF body",
+            ));
         }
         let (back_str, refs_str) = match rest.find('[') {
             Some(bracket_idx) => {
@@ -163,7 +169,9 @@ fn parse_raw_term(term: &str) -> Result<RawOp, ParseError> {
         // Plain `3ch`/`ch` term - same count-prefix grammar as the
         // ordinary DSL, but parsed directly here rather than via
         // `lexer`/`parser`.
-        let digits_end = term.find(|c: char| !c.is_ascii_digit()).unwrap_or(term.len());
+        let digits_end = term
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(term.len());
         let (count_str, abbrev) = term.split_at(digits_end);
         let count = if count_str.is_empty() {
             1
@@ -174,7 +182,9 @@ fn parse_raw_term(term: &str) -> Result<RawOp, ParseError> {
         };
         let abbrev = abbrev.trim().to_string();
         if abbrev.is_empty() {
-            return Err(ParseError::UnexpectedEof("stitch abbreviation in raw DEF body"));
+            return Err(ParseError::UnexpectedEof(
+                "stitch abbreviation in raw DEF body",
+            ));
         }
         Ok(RawOp::Stitch { abbrev, count })
     }
@@ -185,15 +195,18 @@ fn parse_ref(s: &str) -> Result<RawAttachRef, ParseError> {
     if s == "%" {
         Ok(RawAttachRef::SelfRef)
     } else if let Some(n) = s.strip_prefix("%-") {
-        Ok(RawAttachRef::Back(
-            n.parse().map_err(|_| ParseError::InvalidNumber(s.to_string(), 0))?,
-        ))
+        Ok(RawAttachRef::Back(n.parse().map_err(|_| {
+            ParseError::InvalidNumber(s.to_string(), 0)
+        })?))
     } else if let Some(n) = s.strip_prefix("%+") {
-        Ok(RawAttachRef::Forward(
-            n.parse().map_err(|_| ParseError::InvalidNumber(s.to_string(), 0))?,
-        ))
+        Ok(RawAttachRef::Forward(n.parse().map_err(|_| {
+            ParseError::InvalidNumber(s.to_string(), 0)
+        })?))
     } else {
-        Err(ParseError::UnexpectedToken(format!("expected '%'/'%-N'/'%+N', got '{s}'"), 0))
+        Err(ParseError::UnexpectedToken(
+            format!("expected '%'/'%-N'/'%+N', got '{s}'"),
+            0,
+        ))
     }
 }
 
@@ -213,7 +226,10 @@ mod tests {
         assert_eq!(
             ops,
             vec![
-                RawOp::Stitch { abbrev: "ch".to_string(), count: 3 },
+                RawOp::Stitch {
+                    abbrev: "ch".to_string(),
+                    count: 3
+                },
                 RawOp::RelativeStitch {
                     abbrev: "ss".to_string(),
                     back: Some(1),
@@ -225,12 +241,25 @@ mod tests {
 
     #[test]
     fn parses_plain_stitch_with_no_count() {
-        assert_eq!(parse_raw_def("ch").unwrap(), vec![RawOp::Stitch { abbrev: "ch".into(), count: 1 }]);
+        assert_eq!(
+            parse_raw_def("ch").unwrap(),
+            vec![RawOp::Stitch {
+                abbrev: "ch".into(),
+                count: 1
+            }]
+        );
     }
 
     #[test]
     fn parses_relative_stitch_with_no_bracket() {
         let ops = parse_raw_def("ss@1").unwrap();
-        assert_eq!(ops, vec![RawOp::RelativeStitch { abbrev: "ss".to_string(), back: Some(1), refs: vec![] }]);
+        assert_eq!(
+            ops,
+            vec![RawOp::RelativeStitch {
+                abbrev: "ss".to_string(),
+                back: Some(1),
+                refs: vec![]
+            }]
+        );
     }
 }

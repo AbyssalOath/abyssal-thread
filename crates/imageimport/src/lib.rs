@@ -47,7 +47,8 @@ impl ResizeFilter {
 /// pick any width/height you want and re-run, independent of the source
 /// image's proportions or resolution.
 pub fn resize_exact(img: &DynamicImage, width: u32, height: u32, filter: ResizeFilter) -> RgbImage {
-    img.resize_exact(width.max(1), height.max(1), filter.to_image_filter()).to_rgb8()
+    img.resize_exact(width.max(1), height.max(1), filter.to_image_filter())
+        .to_rgb8()
 }
 
 /// Like `resize_exact`, but derives the omitted dimension from the source
@@ -84,10 +85,17 @@ pub fn resize_preserving_aspect(
 /// input always reproduces the same palette.
 pub fn quantize(img: &RgbImage, k: usize) -> ColorGrid {
     let (width, height) = (img.width() as usize, img.height() as usize);
-    let pixels: Vec<[f32; 3]> = img.pixels().map(|p| [p[0] as f32, p[1] as f32, p[2] as f32]).collect();
+    let pixels: Vec<[f32; 3]> = img
+        .pixels()
+        .map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
+        .collect();
 
     if pixels.is_empty() {
-        return ColorGrid { width, height, cells: Vec::new() };
+        return ColorGrid {
+            width,
+            height,
+            cells: Vec::new(),
+        };
     }
     let k = k.clamp(1, pixels.len());
 
@@ -133,7 +141,11 @@ pub fn quantize(img: &RgbImage, k: usize) -> ColorGrid {
         })
         .collect();
 
-    ColorGrid { width, height, cells }
+    ColorGrid {
+        width,
+        height,
+        cells,
+    }
 }
 
 fn dist2(a: [f32; 3], b: [f32; 3]) -> f32 {
@@ -206,7 +218,11 @@ mod tests {
         let img = solid_image(0, 0, [0, 0, 0]);
         let resized = resize_preserving_aspect(&img, Some(40), None, ResizeFilter::Nearest);
         assert_eq!(resized.width(), 40);
-        assert!(resized.height() < 1000, "expected a small derived height, got {}", resized.height());
+        assert!(
+            resized.height() < 1000,
+            "expected a small derived height, got {}",
+            resized.height()
+        );
     }
 
     #[test]
@@ -246,7 +262,14 @@ mod tests {
             }
         }
         let grid = quantize(&img, 3);
-        let has_reddish = grid.palette().iter().any(|c| c[0] as i32 > c[1] as i32 + 60);
-        assert!(has_reddish, "expected a reddish color in palette, got {:?}", grid.palette());
+        let has_reddish = grid
+            .palette()
+            .iter()
+            .any(|c| c[0] as i32 > c[1] as i32 + 60);
+        assert!(
+            has_reddish,
+            "expected a reddish color in palette, got {:?}",
+            grid.palette()
+        );
     }
 }

@@ -32,8 +32,14 @@ pub struct PageSize {
     pub height_mm: f32,
 }
 impl PageSize {
-    pub const US_LETTER: PageSize = PageSize { width_mm: 215.9, height_mm: 279.4 };
-    pub const A4: PageSize = PageSize { width_mm: 210.0, height_mm: 297.0 };
+    pub const US_LETTER: PageSize = PageSize {
+        width_mm: 215.9,
+        height_mm: 279.4,
+    };
+    pub const A4: PageSize = PageSize {
+        width_mm: 210.0,
+        height_mm: 297.0,
+    };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -47,14 +53,25 @@ pub struct TilingPlan {
 /// Pure sizing math, kept separate from PDF generation so it's testable
 /// without needing to inspect PDF bytes - this is the part most likely to
 /// have an off-by-one bug, so it gets its own tests below.
-pub fn compute_tiling(grid_width: usize, grid_height: usize, cell_mm: f32, page: PageSize, margin_mm: f32) -> TilingPlan {
+pub fn compute_tiling(
+    grid_width: usize,
+    grid_height: usize,
+    cell_mm: f32,
+    page: PageSize,
+    margin_mm: f32,
+) -> TilingPlan {
     let usable_w = page.width_mm - 2.0 * margin_mm - LABEL_STRIP_MM;
     let usable_h = page.height_mm - 2.0 * margin_mm - LABEL_STRIP_MM - FOOTER_STRIP_MM;
     let cells_per_page_x = ((usable_w / cell_mm).floor() as usize).max(1);
     let cells_per_page_y = ((usable_h / cell_mm).floor() as usize).max(1);
     let pages_x = grid_width.div_ceil(cells_per_page_x);
     let pages_y = grid_height.div_ceil(cells_per_page_y);
-    TilingPlan { cells_per_page_x, cells_per_page_y, pages_x, pages_y }
+    TilingPlan {
+        cells_per_page_x,
+        cells_per_page_y,
+        pages_x,
+        pages_y,
+    }
 }
 
 /// Generates the full tiled pattern PDF (grid pages + one legend page) and
@@ -69,8 +86,12 @@ pub fn generate_pattern_pdf(
 ) -> anyhow::Result<()> {
     let plan = compute_tiling(grid.width, grid.height, cell_mm, page, margin_mm);
 
-    let (doc, mut page_idx, mut layer_idx) =
-        PdfDocument::new(pattern_name, Mm(page.width_mm), Mm(page.height_mm), "Layer 1");
+    let (doc, mut page_idx, mut layer_idx) = PdfDocument::new(
+        pattern_name,
+        Mm(page.width_mm),
+        Mm(page.height_mm),
+        "Layer 1",
+    );
     let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
     let font_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
 
@@ -165,7 +186,13 @@ pub fn generate_pattern_pdf(
             for (local_x, gx) in (col_start..col_end).enumerate() {
                 if gx % AXIS_LABEL_INTERVAL == 0 {
                     let x = grid_origin_x + local_x as f32 * cell_mm;
-                    layer.use_text(format!("{}", gx + 1), 6.0, Mm(x), Mm(grid_top_y + 1.5), &font);
+                    layer.use_text(
+                        format!("{}", gx + 1),
+                        6.0,
+                        Mm(x),
+                        Mm(grid_top_y + 1.5),
+                        &font,
+                    );
                 }
             }
             for (local_y, gy) in (row_start..row_end).enumerate() {
@@ -204,7 +231,8 @@ pub fn generate_pattern_pdf(
     }
 
     // Legend page.
-    let (legend_page, legend_layer_idx) = doc.add_page(Mm(page.width_mm), Mm(page.height_mm), "Layer 1");
+    let (legend_page, legend_layer_idx) =
+        doc.add_page(Mm(page.width_mm), Mm(page.height_mm), "Layer 1");
     let layer = doc.get_page(legend_page).get_layer(legend_layer_idx);
     layer.use_text(
         format!("{pattern_name} - color legend"),
@@ -228,7 +256,10 @@ pub fn generate_pattern_pdf(
         let symbol = (b'A' + (i % 26) as u8) as char;
         let name = abyssal_thread_export::nearest_color_name(*c);
         layer.use_text(
-            format!("{symbol} = #{:02x}{:02x}{:02x} (~ {name})", c[0], c[1], c[2]),
+            format!(
+                "{symbol} = #{:02x}{:02x}{:02x} (~ {name})",
+                c[0], c[1], c[2]
+            ),
             10.0,
             Mm(margin_mm + 12.0),
             Mm(y - 4.0),
@@ -244,7 +275,13 @@ pub fn generate_pattern_pdf(
 /// viewer - from there, the user hits that viewer's own Print button. This
 /// is the "Print..." toolbar action; `generate_pattern_pdf` alone (writing
 /// to a user-chosen path) is the "Export PDF..." action.
-pub fn print_via_system_default(grid: &ColorGrid, cell_mm: f32, pattern_name: &str, page: PageSize, margin_mm: f32) -> anyhow::Result<()> {
+pub fn print_via_system_default(
+    grid: &ColorGrid,
+    cell_mm: f32,
+    pattern_name: &str,
+    page: PageSize,
+    margin_mm: f32,
+) -> anyhow::Result<()> {
     let mut path = std::env::temp_dir();
     path.push(format!("{}_print.pdf", sanitize_filename(pattern_name)));
     generate_pattern_pdf(grid, cell_mm, pattern_name, &path, page, margin_mm)?;
@@ -255,7 +292,13 @@ pub fn print_via_system_default(grid: &ColorGrid, cell_mm: f32, pattern_name: &s
 fn sanitize_filename(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if cleaned.is_empty() {
         "pattern".to_string()
@@ -276,11 +319,21 @@ mod tests {
         // 12.7mm (0.5in) margin, matching the GUI's default.
         assert_eq!(
             compute_tiling(60, 32, 6.0, PageSize::US_LETTER, 12.7),
-            TilingPlan { cells_per_page_x: 30, cells_per_page_y: 39, pages_x: 2, pages_y: 1 }
+            TilingPlan {
+                cells_per_page_x: 30,
+                cells_per_page_y: 39,
+                pages_x: 2,
+                pages_y: 1
+            }
         );
         assert_eq!(
             compute_tiling(150, 97, 6.0, PageSize::US_LETTER, 12.7),
-            TilingPlan { cells_per_page_x: 30, cells_per_page_y: 39, pages_x: 5, pages_y: 3 }
+            TilingPlan {
+                cells_per_page_x: 30,
+                cells_per_page_y: 39,
+                pages_x: 5,
+                pages_y: 3
+            }
         );
     }
 
@@ -290,8 +343,14 @@ mod tests {
             let plan = compute_tiling(w, h, cell_mm, PageSize::US_LETTER, 12.7);
             let covered_w = plan.pages_x * plan.cells_per_page_x;
             let covered_h = plan.pages_y * plan.cells_per_page_y;
-            assert!(covered_w >= w, "tiles must cover the full width ({w}), got {covered_w}");
-            assert!(covered_h >= h, "tiles must cover the full height ({h}), got {covered_h}");
+            assert!(
+                covered_w >= w,
+                "tiles must cover the full width ({w}), got {covered_w}"
+            );
+            assert!(
+                covered_h >= h,
+                "tiles must cover the full height ({h}), got {covered_h}"
+            );
             // No more than one extra tile's worth of slack in either direction.
             assert!(covered_w - w < plan.cells_per_page_x);
             assert!(covered_h - h < plan.cells_per_page_y);
@@ -300,7 +359,10 @@ mod tests {
 
     #[test]
     fn sanitize_filename_strips_unsafe_characters() {
-        assert_eq!(sanitize_filename("merci pour le venin!"), "merci_pour_le_venin_");
+        assert_eq!(
+            sanitize_filename("merci pour le venin!"),
+            "merci_pour_le_venin_"
+        );
         assert_eq!(sanitize_filename(""), "pattern");
     }
 }

@@ -48,11 +48,27 @@ pub struct GridCell {
 
 pub enum GridAction {
     Select(Vec<NodeIndex>),
-    AppendStitch { round: usize, text: String, label: Option<String>, color: Option<[u8; 3]> },
-    EditCell { round: usize, cell: usize, text: String, label: Option<String>, color: Option<[u8; 3]> },
-    DeleteCell { round: usize, cell: usize },
+    AppendStitch {
+        round: usize,
+        text: String,
+        label: Option<String>,
+        color: Option<[u8; 3]>,
+    },
+    EditCell {
+        round: usize,
+        cell: usize,
+        text: String,
+        label: Option<String>,
+        color: Option<[u8; 3]>,
+    },
+    DeleteCell {
+        round: usize,
+        cell: usize,
+    },
     AddRound,
-    DeleteRound { round: usize },
+    DeleteRound {
+        round: usize,
+    },
 }
 
 /// State for the "add/edit stitch" popup window. Lives on `GoblinApp`
@@ -91,7 +107,9 @@ impl GridState {
         let rounds = g
             .rounds
             .iter()
-            .map(|round| GridRound { cells: Self::build_cells(g, round) })
+            .map(|round| GridRound {
+                cells: Self::build_cells(g, round),
+            })
             .collect();
         GridState { rounds }
     }
@@ -178,7 +196,12 @@ impl GridState {
     pub fn apply(&mut self, action: GridAction) {
         match action {
             GridAction::Select(_) => {}
-            GridAction::AppendStitch { round, text, label, color } => {
+            GridAction::AppendStitch {
+                round,
+                text,
+                label,
+                color,
+            } => {
                 if let Some(r) = self.rounds.get_mut(round) {
                     r.cells.push(GridCell {
                         nodes: Vec::new(), // no graph node yet; filled in on recompile
@@ -190,8 +213,18 @@ impl GridState {
                     });
                 }
             }
-            GridAction::EditCell { round, cell, text, label, color } => {
-                if let Some(c) = self.rounds.get_mut(round).and_then(|r| r.cells.get_mut(cell)) {
+            GridAction::EditCell {
+                round,
+                cell,
+                text,
+                label,
+                color,
+            } => {
+                if let Some(c) = self
+                    .rounds
+                    .get_mut(round)
+                    .and_then(|r| r.cells.get_mut(cell))
+                {
                     c.kind = parse_stitch_text(&text);
                     c.label = label;
                     c.color = color;
@@ -250,8 +283,11 @@ impl GridState {
             // stitches *and* colors line up - otherwise "6sc" with one
             // stitch colored differently could get misrecognized as a
             // shorter repeating block that silently drops that color.
-            let tokens: Vec<String> =
-                round.cells.iter().map(|c| stitch_dsl_text(&c.kind, c.color)).collect();
+            let tokens: Vec<String> = round
+                .cells
+                .iter()
+                .map(|c| stitch_dsl_text(&c.kind, c.color))
+                .collect();
             for p in 2..=(n / 2) {
                 if !n.is_multiple_of(p) {
                     continue;
@@ -296,7 +332,11 @@ impl GridState {
                     j += 1;
                 }
             }
-            tokens.push(if count > 1 { format!("{count}{text}") } else { text });
+            tokens.push(if count > 1 {
+                format!("{count}{text}")
+            } else {
+                text
+            });
             i = j;
         }
         tokens.join(", ")
@@ -312,7 +352,11 @@ fn combine_tension(a: Option<TensionState>, b: Option<TensionState>) -> Option<T
             None => 0,
         }
     }
-    if rank(a) >= rank(b) { a } else { b }
+    if rank(a) >= rank(b) {
+        a
+    } else {
+        b
+    }
 }
 
 /// DSL text for one stitch, including its trailing `~hex` color suffix if
@@ -454,7 +498,10 @@ pub fn show(
                     }
                     button.context_menu(|ui| {
                         if ui.button("Delete stitch").clicked() {
-                            action = Some(GridAction::DeleteCell { round: round_idx, cell: cell_idx });
+                            action = Some(GridAction::DeleteCell {
+                                round: round_idx,
+                                cell: cell_idx,
+                            });
                             ui.close_menu();
                         }
                     });
@@ -482,7 +529,11 @@ pub fn show(
     if let Some(mut edit) = pending.clone() {
         let mut window_open = true;
         let mut close_after = false;
-        let title = if edit.cell.is_some() { "Edit stitch" } else { "Add stitch" };
+        let title = if edit.cell.is_some() {
+            "Edit stitch"
+        } else {
+            "Add stitch"
+        };
 
         egui::Window::new(title)
             .collapsible(false)

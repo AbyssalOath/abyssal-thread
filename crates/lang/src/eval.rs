@@ -89,23 +89,30 @@ pub fn eval(pattern: &Pattern) -> Result<StitchGraph, ParseError> {
 
         for op in flat_ops {
             if g.stitch_count() > MAX_TOTAL_STITCHES {
-                return Err(ParseError::PatternTooLarge(g.stitch_count(), MAX_TOTAL_STITCHES));
+                return Err(ParseError::PatternTooLarge(
+                    g.stitch_count(),
+                    MAX_TOTAL_STITCHES,
+                ));
             }
             match op {
                 FlatOp::Label(name) => pending_label = Some(name),
                 FlatOp::AttachTo(name) => pending_attach = Some(name),
-                FlatOp::RawInvoke { name, raw_ops, count } => {
+                FlatOp::RawInvoke {
+                    name,
+                    raw_ops,
+                    count,
+                } => {
                     for inv_n in 0..count {
                         // Same "only the first sub-invocation consumes an
                         // explicit `@label`" rule ordinary `FlatOp::Stitch`
                         // uses for `count > 1` - see below.
                         let explicit_parent = if inv_n == 0 {
                             match pending_attach.take() {
-                                Some(label_name) => Some(
-                                    *g.labels
-                                        .get(&label_name)
-                                        .ok_or_else(|| ParseError::UnknownLabel(label_name.clone()))?,
-                                ),
+                                Some(label_name) => {
+                                    Some(*g.labels.get(&label_name).ok_or_else(|| {
+                                        ParseError::UnknownLabel(label_name.clone())
+                                    })?)
+                                }
                                 None => None,
                             }
                         } else {
@@ -126,7 +133,13 @@ pub fn eval(pattern: &Pattern) -> Result<StitchGraph, ParseError> {
                         );
                     }
                 }
-                FlatOp::Stitch { modifier, abbrev, count, color, def_origin } => {
+                FlatOp::Stitch {
+                    modifier,
+                    abbrev,
+                    count,
+                    color,
+                    def_origin,
+                } => {
                     let base_kind = apply_modifier(StitchKind::from_abbrev(&abbrev), &modifier);
                     let is_increase = matches!(base_kind, StitchKind::Increase(_));
                     let is_decrease = matches!(base_kind, StitchKind::Decrease(_));
@@ -143,50 +156,61 @@ pub fn eval(pattern: &Pattern) -> Result<StitchGraph, ParseError> {
                         // back to the positional parent cursor.
                         let explicit_parent = if op_n == 0 {
                             match pending_attach.take() {
-                                Some(label_name) => Some(
-                                    *g.labels
-                                        .get(&label_name)
-                                        .ok_or_else(|| ParseError::UnknownLabel(label_name.clone()))?,
-                                ),
+                                Some(label_name) => {
+                                    Some(*g.labels.get(&label_name).ok_or_else(|| {
+                                        ParseError::UnknownLabel(label_name.clone())
+                                    })?)
+                                }
                                 None => None,
                             }
                         } else {
                             None
                         };
 
-                        let place_stitch = |g: &mut StitchGraph,
-                                                 last_in_round: &mut Option<NodeIndex>,
-                                                 this_round: &mut Vec<NodeIndex>,
-                                                 pending_label: &mut Option<String>,
-                                                 parent: Option<NodeIndex>| {
-                            let label = pending_label.take();
-                            let node = g.add_stitch(base_kind.clone(), round_idx, label);
-                            if let Some(c) = color {
-                                g.set_color(node, c);
-                            }
-                            if let Some(origin) = &def_origin {
-                                g.graph[node].def_origin = Some(origin.clone());
-                            }
-                            if let Some(prev) = *last_in_round {
-                                g.connect(prev, node, StitchEdge::Sequence);
-                            }
-                            *last_in_round = Some(node);
-                            this_round.push(node);
-                            if round_idx > 0 {
-                                if let Some(p) = parent {
-                                    g.connect(p, node, StitchEdge::Parent);
+                        let place_stitch =
+                            |g: &mut StitchGraph,
+                             last_in_round: &mut Option<NodeIndex>,
+                             this_round: &mut Vec<NodeIndex>,
+                             pending_label: &mut Option<String>,
+                             parent: Option<NodeIndex>| {
+                                let label = pending_label.take();
+                                let node = g.add_stitch(base_kind.clone(), round_idx, label);
+                                if let Some(c) = color {
+                                    g.set_color(node, c);
                                 }
-                            }
-                            node
-                        };
+                                if let Some(origin) = &def_origin {
+                                    g.graph[node].def_origin = Some(origin.clone());
+                                }
+                                if let Some(prev) = *last_in_round {
+                                    g.connect(prev, node, StitchEdge::Sequence);
+                                }
+                                *last_in_round = Some(node);
+                                this_round.push(node);
+                                if round_idx > 0 {
+                                    if let Some(p) = parent {
+                                        g.connect(p, node, StitchEdge::Parent);
+                                    }
+                                }
+                                node
+                            };
 
                         if is_increase {
                             // One increase = two children sharing one parent slot.
                             let parent = explicit_parent.or_else(|| {
-                                if round_idx > 0 { parent_cursor.pop_front() } else { None }
+                                if round_idx > 0 {
+                                    parent_cursor.pop_front()
+                                } else {
+                                    None
+                                }
                             });
                             for _ in 0..2 {
-                                place_stitch(&mut g, &mut last_in_round, &mut this_round, &mut pending_label, parent);
+                                place_stitch(
+                                    &mut g,
+                                    &mut last_in_round,
+                                    &mut this_round,
+                                    &mut pending_label,
+                                    parent,
+                                );
                             }
                         } else if is_decrease {
                             // One decrease = two parents merged into one child.
@@ -197,16 +221,31 @@ pub fn eval(pattern: &Pattern) -> Result<StitchGraph, ParseError> {
                             } else {
                                 (None, None)
                             };
-                            let node =
-                                place_stitch(&mut g, &mut last_in_round, &mut this_round, &mut pending_label, p1);
+                            let node = place_stitch(
+                                &mut g,
+                                &mut last_in_round,
+                                &mut this_round,
+                                &mut pending_label,
+                                p1,
+                            );
                             if let Some(p2) = p2 {
                                 g.connect(p2, node, StitchEdge::Parent);
                             }
                         } else {
                             let parent = explicit_parent.or_else(|| {
-                                if round_idx > 0 { parent_cursor.pop_front() } else { None }
+                                if round_idx > 0 {
+                                    parent_cursor.pop_front()
+                                } else {
+                                    None
+                                }
                             });
-                            place_stitch(&mut g, &mut last_in_round, &mut this_round, &mut pending_label, parent);
+                            place_stitch(
+                                &mut g,
+                                &mut last_in_round,
+                                &mut this_round,
+                                &mut pending_label,
+                                parent,
+                            );
                         }
                     }
                 }
@@ -236,7 +275,11 @@ enum FlatOp {
     /// `raw_def`). Carries the already-parsed body so `eval`'s main loop
     /// doesn't need to re-look-up/re-parse the definition text, and the
     /// def's own name for `def_origin` tagging and warning messages.
-    RawInvoke { name: String, raw_ops: Vec<RawOp>, count: u32 },
+    RawInvoke {
+        name: String,
+        raw_ops: Vec<RawOp>,
+        count: u32,
+    },
 }
 
 fn flatten(ops: &[Op], defs: &HashMap<String, String>) -> Result<Vec<FlatOp>, ParseError> {
@@ -278,7 +321,12 @@ fn flatten_into(
         return Err(ParseError::PatternTooLarge(out.len(), MAX_TOTAL_STITCHES));
     }
     match op {
-        Op::Stitch { modifier, abbrev, count, color } => {
+        Op::Stitch {
+            modifier,
+            abbrev,
+            count,
+            color,
+        } => {
             if !is_builtin_abbrev(abbrev) {
                 if let Some(body_src) = defs.get(abbrev) {
                     if raw_def::looks_like_raw_body(body_src) {
@@ -307,7 +355,11 @@ fn flatten_into(
                                 ));
                             }
                         }
-                        out.push(FlatOp::RawInvoke { name: abbrev.clone(), raw_ops, count: *count });
+                        out.push(FlatOp::RawInvoke {
+                            name: abbrev.clone(),
+                            raw_ops,
+                            count: *count,
+                        });
                         return Ok(());
                     }
                     if expanding.contains(abbrev) {
@@ -404,9 +456,13 @@ fn expand_raw_def(
 
     // `pre_len` is `history.len()` *before* placing the term currently
     // being resolved, i.e. the cursor position `%`/`@N` count back from.
-    let resolve_back = |history: &[Option<NodeIndex>], pre_len: usize, n: u32| -> Option<NodeIndex> {
-        pre_len.checked_sub(1)?.checked_sub(n as usize).and_then(|i| history.get(i).copied().flatten())
-    };
+    let resolve_back =
+        |history: &[Option<NodeIndex>], pre_len: usize, n: u32| -> Option<NodeIndex> {
+            pre_len
+                .checked_sub(1)?
+                .checked_sub(n as usize)
+                .and_then(|i| history.get(i).copied().flatten())
+        };
 
     for raw_op in raw_ops {
         let (abbrev, count, back, refs): (&str, u32, Option<u32>, &[RawAttachRef]) = match raw_op {
@@ -427,7 +483,11 @@ fn expand_raw_def(
                     resolved
                 }
                 None => explicit_parent.take().or_else(|| {
-                    if round_idx > 0 { cursor.parent_cursor.pop_front() } else { None }
+                    if round_idx > 0 {
+                        cursor.parent_cursor.pop_front()
+                    } else {
+                        None
+                    }
                 }),
             };
             let kind = StitchKind::from_abbrev(abbrev);
@@ -551,7 +611,8 @@ mod tests {
 
     #[test]
     fn attach_to_label_skips_positional_cursor() {
-        let pattern = parser::parse("6sc\nsc, sc, anchor!, sc, sc, sc, sc\n@anchor, sc, 5sc\n").unwrap();
+        let pattern =
+            parser::parse("6sc\nsc, sc, anchor!, sc, sc, sc, sc\n@anchor, sc, 5sc\n").unwrap();
         let g = eval(&pattern).unwrap();
         let anchor_idx = *g.labels.get("anchor").unwrap();
         // The stitch attached via @anchor should have a Parent edge from anchor_idx.
@@ -601,7 +662,10 @@ mod tests {
         let src = "DEF: p = 3ch, ss@1[%,%-4]\n2sc\n1p\n";
         let pattern = parser::parse(src).unwrap();
         let g = eval(&pattern).unwrap();
-        assert!(g.warnings.iter().any(|w| w.contains('p') && w.contains("%-4")));
+        assert!(g
+            .warnings
+            .iter()
+            .any(|w| w.contains('p') && w.contains("%-4")));
     }
 
     #[test]
@@ -641,11 +705,12 @@ mod tests {
         // which isn't what "300 rounds" needs here.
         let src: String = "300sc\n".repeat(300);
         let pattern = parser::parse(&src).expect("realistic large pattern should parse");
-        let g = eval(&pattern).expect("realistic large pattern should evaluate without hitting the safety limit");
+        let g = eval(&pattern)
+            .expect("realistic large pattern should evaluate without hitting the safety limit");
         assert_eq!(g.stitch_count(), 300 * 300);
         assert_eq!(g.round_count(), 300);
     }
- 
+
     #[test]
     fn a_pattern_just_under_the_total_stitch_limit_succeeds() {
         // 499,900 stitches (one round, via a repeat group) - deliberately
@@ -655,10 +720,11 @@ mod tests {
         // still within budget.
         let src = "(100sc) * 4999\n";
         let pattern = parser::parse(src).expect("pattern should parse");
-        let g = eval(&pattern).expect("a pattern just under the total-stitch limit should still succeed");
+        let g = eval(&pattern)
+            .expect("a pattern just under the total-stitch limit should still succeed");
         assert_eq!(g.stitch_count(), 499_900);
     }
- 
+
     #[test]
     fn a_pattern_with_many_small_custom_stitch_invocations_evaluates_correctly() {
         // Realistic use of a custom stitch at scale: a shell-stitch trim
@@ -670,7 +736,9 @@ mod tests {
         // of invocations like the other DEF-focused tests use.
         let src = "DEF: shell = 3dc, ch1\n300sc\n(100shell) * 3\n";
         let pattern = parser::parse(src).expect("pattern should parse");
-        let g = eval(&pattern).expect("many custom-stitch invocations should evaluate without hitting the safety limit");
+        let g = eval(&pattern).expect(
+            "many custom-stitch invocations should evaluate without hitting the safety limit",
+        );
         // 3 repeats * 100 invocations * 4 stitches per "shell" (3dc + ch1).
         assert_eq!(g.rounds[1].len(), 3 * 100 * 4);
         for &idx in &g.rounds[1] {

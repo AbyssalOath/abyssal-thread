@@ -13,10 +13,17 @@ pub fn export_obj(g: &StitchGraph) -> String {
     let mut index_map: HashMap<_, usize> = HashMap::new();
 
     for (i, node_idx) in g.graph.node_indices().enumerate() {
-        let pos = g.graph[node_idx].position.unwrap_or(abyssal_thread_core::Vec3::ZERO);
+        let pos = g.graph[node_idx]
+            .position
+            .unwrap_or(abyssal_thread_core::Vec3::ZERO);
         // OBJ vertex coordinates are in meters by convention here; our
         // baseline dimensions are millimeters, so scale down.
-        out.push_str(&format!("v {:.4} {:.4} {:.4}\n", pos.x / 1000.0, pos.y / 1000.0, pos.z / 1000.0));
+        out.push_str(&format!(
+            "v {:.4} {:.4} {:.4}\n",
+            pos.x / 1000.0,
+            pos.y / 1000.0,
+            pos.z / 1000.0
+        ));
         index_map.insert(node_idx, i + 1); // OBJ indices are 1-based
     }
 

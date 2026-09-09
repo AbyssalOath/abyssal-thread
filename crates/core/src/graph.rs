@@ -1,7 +1,4 @@
-use crate::{
-    geometry::Vec3,
-    stitch::StitchKind,
-};
+use crate::{geometry::Vec3, stitch::StitchKind};
 use petgraph::{
     graph::{DiGraph, NodeIndex},
     visit::EdgeRef,
@@ -81,7 +78,12 @@ impl StitchGraph {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn add_stitch(&mut self, kind: StitchKind, round: usize, label: Option<String>) -> NodeIndex {
+    pub fn add_stitch(
+        &mut self,
+        kind: StitchKind,
+        round: usize,
+        label: Option<String>,
+    ) -> NodeIndex {
         while self.rounds.len() <= round {
             self.rounds.push(Vec::new());
         }

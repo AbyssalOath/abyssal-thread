@@ -74,7 +74,14 @@ pub fn export_svg_chart(g: &StitchGraph) -> String {
             if node.kind.is_decrease() {
                 // Already a single node (two Parent edges) - one glyph, no
                 // pairing needed.
-                body.push_str(&branch_glyph(symbol, false, RADIUS * 0.7, x, y, node.label.as_deref()));
+                body.push_str(&branch_glyph(
+                    symbol,
+                    false,
+                    RADIUS * 0.7,
+                    x,
+                    y,
+                    node.label.as_deref(),
+                ));
             } else {
                 // Also catches a lone, unpaired `is_increase()` node (its
                 // partner had a label, a different parent, or some other
@@ -155,8 +162,12 @@ fn glyph(symbol: &str, modifier: Option<&str>, x: f32, y: f32, label: Option<&st
             }
             s
         }
-        _ => format!(r#"<rect x="{rx}" y="{ry}" width="{s}" height="{s}" fill="none" stroke="black"/>"#,
-            rx = x - RADIUS * 0.7, ry = y - RADIUS * 0.7, s = RADIUS * 1.4),
+        _ => format!(
+            r#"<rect x="{rx}" y="{ry}" width="{s}" height="{s}" fill="none" stroke="black"/>"#,
+            rx = x - RADIUS * 0.7,
+            ry = y - RADIUS * 0.7,
+            s = RADIUS * 1.4
+        ),
     };
 
     // Loop-only/post modifiers are layered on as a small extra mark beside
@@ -198,7 +209,12 @@ fn glyph(symbol: &str, modifier: Option<&str>, x: f32, y: f32, label: Option<&st
     };
 
     let label_text = label
-        .map(|l| format!(r#"<text x="{x}" y="{y2}" text-anchor="middle">{l}</text>"#, y2 = y - RADIUS - 4.0))
+        .map(|l| {
+            format!(
+                r#"<text x="{x}" y="{y2}" text-anchor="middle">{l}</text>"#,
+                y2 = y - RADIUS - 4.0
+            )
+        })
         .unwrap_or_default();
 
     format!("{shape}{modifier_mark}{label_text}\n")
@@ -217,18 +233,34 @@ fn glyph(symbol: &str, modifier: Option<&str>, x: f32, y: f32, label: Option<&st
 /// `export_svg_chart`. `offset` is how far apart the two copies sit -
 /// wider for an increase (its pair of nodes spans two grid columns) than a
 /// decrease (a single node/column reaching down to two parents).
-fn branch_glyph(symbol: &str, is_increase: bool, offset: f32, x: f32, y: f32, label: Option<&str>) -> String {
+fn branch_glyph(
+    symbol: &str,
+    is_increase: bool,
+    offset: f32,
+    x: f32,
+    y: f32,
+    label: Option<&str>,
+) -> String {
     let (x1, x2) = (x - offset, x + offset);
     let shape1 = glyph(symbol, None, x1, y, None);
     let shape2 = glyph(symbol, None, x2, y, None);
 
-    let single_y = if is_increase { y + RADIUS * 1.8 } else { y - RADIUS * 1.8 };
+    let single_y = if is_increase {
+        y + RADIUS * 1.8
+    } else {
+        y - RADIUS * 1.8
+    };
     let converge = format!(
         r#"<line x1="{x1}" y1="{y}" x2="{x}" y2="{single_y}" stroke="black"/><line x1="{x2}" y1="{y}" x2="{x}" y2="{single_y}" stroke="black"/>"#,
     );
 
     let label_text = label
-        .map(|l| format!(r#"<text x="{x}" y="{y2}" text-anchor="middle">{l}</text>"#, y2 = y - RADIUS * 2.2))
+        .map(|l| {
+            format!(
+                r#"<text x="{x}" y="{y2}" text-anchor="middle">{l}</text>"#,
+                y2 = y - RADIUS * 2.2
+            )
+        })
         .unwrap_or_default();
 
     format!("{shape1}{shape2}{converge}{label_text}\n")

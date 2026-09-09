@@ -39,14 +39,18 @@ pub static FONT_FAMILIES: &[FontFamily] = &[
         regular: include_bytes!("../../../assets/fonts/Open_Sans/static/OpenSans-Regular.ttf"),
         bold: include_bytes!("../../../assets/fonts/Open_Sans/static/OpenSans-Bold.ttf"),
         italic: include_bytes!("../../../assets/fonts/Open_Sans/static/OpenSans-Italic.ttf"),
-        bold_italic: include_bytes!("../../../assets/fonts/Open_Sans/static/OpenSans-BoldItalic.ttf"),
+        bold_italic: include_bytes!(
+            "../../../assets/fonts/Open_Sans/static/OpenSans-BoldItalic.ttf"
+        ),
     },
     FontFamily {
         name: "Montserrat",
         regular: include_bytes!("../../../assets/fonts/Montserrat/static/Montserrat-Regular.ttf"),
         bold: include_bytes!("../../../assets/fonts/Montserrat/static/Montserrat-Bold.ttf"),
         italic: include_bytes!("../../../assets/fonts/Montserrat/static/Montserrat-Italic.ttf"),
-        bold_italic: include_bytes!("../../../assets/fonts/Montserrat/static/Montserrat-BoldItalic.ttf"),
+        bold_italic: include_bytes!(
+            "../../../assets/fonts/Montserrat/static/Montserrat-BoldItalic.ttf"
+        ),
     },
     FontFamily {
         name: "PT Sans",
@@ -57,10 +61,18 @@ pub static FONT_FAMILIES: &[FontFamily] = &[
     },
     FontFamily {
         name: "Playfair Display",
-        regular: include_bytes!("../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-Regular.ttf"),
-        bold: include_bytes!("../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-Bold.ttf"),
-        italic: include_bytes!("../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-Italic.ttf"),
-        bold_italic: include_bytes!("../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-BoldItalic.ttf"),
+        regular: include_bytes!(
+            "../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-Regular.ttf"
+        ),
+        bold: include_bytes!(
+            "../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-Bold.ttf"
+        ),
+        italic: include_bytes!(
+            "../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-Italic.ttf"
+        ),
+        bold_italic: include_bytes!(
+            "../../../assets/fonts/Playfair_Display/static/PlayfairDisplay-BoldItalic.ttf"
+        ),
     },
     FontFamily {
         name: "Roboto",
@@ -93,7 +105,10 @@ pub fn resolve_system_font_path(family_name: &str) -> Option<String> {
     use font_kit::source::SystemSource;
 
     let handle = SystemSource::new()
-        .select_best_match(&[FamilyName::Title(family_name.to_string())], &Properties::new())
+        .select_best_match(
+            &[FamilyName::Title(family_name.to_string())],
+            &Properties::new(),
+        )
         .ok()?;
     match handle {
         Handle::Path { path, .. } => Some(path.display().to_string()),
@@ -113,10 +128,22 @@ mod tests {
     #[test]
     fn every_bundled_family_has_all_four_nonempty_variants() {
         for family in FONT_FAMILIES {
-            assert!(!family.regular.is_empty(), "{}: regular is empty", family.name);
+            assert!(
+                !family.regular.is_empty(),
+                "{}: regular is empty",
+                family.name
+            );
             assert!(!family.bold.is_empty(), "{}: bold is empty", family.name);
-            assert!(!family.italic.is_empty(), "{}: italic is empty", family.name);
-            assert!(!family.bold_italic.is_empty(), "{}: bold_italic is empty", family.name);
+            assert!(
+                !family.italic.is_empty(),
+                "{}: italic is empty",
+                family.name
+            );
+            assert!(
+                !family.bold_italic.is_empty(),
+                "{}: bold_italic is empty",
+                family.name
+            );
         }
     }
 
@@ -125,10 +152,19 @@ mod tests {
         // Only need one family for this - it's testing the (bool, bool)
         // match arms, not per-family content.
         let family = &FONT_FAMILIES[0];
-        assert_eq!(family.bytes_for(false, false).as_ptr(), family.regular.as_ptr());
+        assert_eq!(
+            family.bytes_for(false, false).as_ptr(),
+            family.regular.as_ptr()
+        );
         assert_eq!(family.bytes_for(true, false).as_ptr(), family.bold.as_ptr());
-        assert_eq!(family.bytes_for(false, true).as_ptr(), family.italic.as_ptr());
-        assert_eq!(family.bytes_for(true, true).as_ptr(), family.bold_italic.as_ptr());
+        assert_eq!(
+            family.bytes_for(false, true).as_ptr(),
+            family.italic.as_ptr()
+        );
+        assert_eq!(
+            family.bytes_for(true, true).as_ptr(),
+            family.bold_italic.as_ptr()
+        );
     }
 
     #[test]
@@ -163,7 +199,11 @@ mod tests {
         let original_len = names.len();
         names.sort_unstable();
         names.dedup();
-        assert_eq!(names.len(), original_len, "duplicate family name in FONT_FAMILIES");
+        assert_eq!(
+            names.len(),
+            original_len,
+            "duplicate family name in FONT_FAMILIES"
+        );
     }
 
     // --- font-kit-backed system enumeration: deliberately tolerant of
@@ -177,7 +217,10 @@ mod tests {
         let mut sorted_deduped = names.clone();
         sorted_deduped.sort();
         sorted_deduped.dedup();
-        assert_eq!(names, sorted_deduped, "enumerate_system_font_families should already be sorted+deduped");
+        assert_eq!(
+            names, sorted_deduped,
+            "enumerate_system_font_families should already be sorted+deduped"
+        );
     }
 
     #[test]

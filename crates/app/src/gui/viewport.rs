@@ -29,14 +29,24 @@ pub struct ViewportState {
 
 impl Default for ViewportState {
     fn default() -> Self {
-        Self { yaw: 0.6, pitch: 0.4, distance: 200.0, target: Vec3::ZERO, shaded: true }
+        Self {
+            yaw: 0.6,
+            pitch: 0.4,
+            distance: 200.0,
+            target: Vec3::ZERO,
+            shaded: true,
+        }
     }
 }
 
 const FOV: f32 = 60.0_f32 * std::f32::consts::PI / 180.0;
 /// Fixed world-space light direction for flat shading, arbitrary but
 /// stable so the lighting doesn't spin along with the camera.
-const LIGHT_DIR: Vec3 = Vec3 { x: 0.3, y: 0.4, z: 0.85 };
+const LIGHT_DIR: Vec3 = Vec3 {
+    x: 0.3,
+    y: 0.4,
+    z: 0.85,
+};
 const AMBIENT: f32 = 0.35;
 
 fn camera_position(state: &ViewportState) -> Vec3 {
@@ -171,7 +181,8 @@ pub fn show(
     state: &mut ViewportState,
     selected: &[NodeIndex],
 ) -> Option<NodeIndex> {
-    let (rect, response) = ui.allocate_exact_size(ui.available_size(), egui::Sense::click_and_drag());
+    let (rect, response) =
+        ui.allocate_exact_size(ui.available_size(), egui::Sense::click_and_drag());
 
     if response.dragged() {
         let delta = response.drag_delta();
@@ -202,13 +213,18 @@ pub fn show(
         let mut draws: Vec<(f32, Vec<Pos2>, Color32)> = Vec::new();
 
         for face in build_faces(g) {
-            let positions: Option<Vec<Vec3>> = face.iter().map(|&idx| g.graph[idx].position).collect();
+            let positions: Option<Vec<Vec3>> =
+                face.iter().map(|&idx| g.graph[idx].position).collect();
             let Some(positions) = positions else { continue };
-            let cams: Vec<Vec3> = positions.iter().map(|&p| to_camera_space(p, state)).collect();
+            let cams: Vec<Vec3> = positions
+                .iter()
+                .map(|&p| to_camera_space(p, state))
+                .collect();
             if cams.iter().any(|c| c.z <= 1.0) {
                 continue; // skip faces poking through the near plane
             }
-            let screen: Option<Vec<Pos2>> = cams.iter().map(|&c| screen_from_cam(c, rect)).collect();
+            let screen: Option<Vec<Pos2>> =
+                cams.iter().map(|&c| screen_from_cam(c, rect)).collect();
             let Some(screen) = screen else { continue };
 
             let edge1 = positions[1] - positions[0];
@@ -228,13 +244,18 @@ pub fn show(
         // Painter's algorithm: farthest first so nearer faces draw on top.
         draws.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         for (_, points, color) in draws {
-            painter.add(egui::Shape::convex_polygon(points, color, egui::Stroke::NONE));
+            painter.add(egui::Shape::convex_polygon(
+                points,
+                color,
+                egui::Stroke::NONE,
+            ));
         }
     } else {
         for edge in g.graph.edge_references() {
-            let (Some(pa), Some(pb)) =
-                (g.graph[edge.source()].position, g.graph[edge.target()].position)
-            else {
+            let (Some(pa), Some(pb)) = (
+                g.graph[edge.source()].position,
+                g.graph[edge.target()].position,
+            ) else {
                 continue;
             };
             if let (Some(sa), Some(sb)) = (project(pa, state, rect), project(pb, state, rect)) {
@@ -253,7 +274,9 @@ pub fn show(
     for idx in g.graph.node_indices() {
         let node = &g.graph[idx];
         let Some(pos) = node.position else { continue };
-        let Some(screen) = project(pos, state, rect) else { continue };
+        let Some(screen) = project(pos, state, rect) else {
+            continue;
+        };
 
         let is_selected = selected.contains(&idx);
         let radius = if is_selected { 6.0 } else { 4.0 };

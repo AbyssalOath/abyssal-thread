@@ -59,8 +59,12 @@ pub fn generate_shaped_pattern_pdf(
     let max_round_len = graph.rounds.iter().map(|r| r.len()).max().unwrap_or(0);
     let plan = compute_tiling(max_round_len, total_rounds, cell_mm, page, margin_mm);
 
-    let (doc, mut page_idx, mut layer_idx) =
-        PdfDocument::new(pattern_name, Mm(page.width_mm), Mm(page.height_mm), "Layer 1");
+    let (doc, mut page_idx, mut layer_idx) = PdfDocument::new(
+        pattern_name,
+        Mm(page.width_mm),
+        Mm(page.height_mm),
+        "Layer 1",
+    );
     let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
     let font_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
 
@@ -94,14 +98,22 @@ pub fn generate_shaped_pattern_pdf(
                 let y0 = grid_top_y - local_y as f32 * cell_mm;
 
                 for (local_x, gx) in (col_start..col_end).enumerate() {
-                    let Some(&node_idx) = round.get(gx) else { continue };
+                    let Some(&node_idx) = round.get(gx) else {
+                        continue;
+                    };
                     let node = &graph.graph[node_idx];
                     let label = node.kind.display_label();
                     let (r, g, b) = stitch_print_rgb(node.color, node.tension);
                     let x0 = grid_origin_x + local_x as f32 * cell_mm;
 
                     layer.set_fill_color(Color::Rgb(Rgb::new(r, g, b, None)));
-                    layer.use_text(&label, font_size, Mm(x0 + 0.5), Mm(y0 - cell_mm * 0.75), &font);
+                    layer.use_text(
+                        &label,
+                        font_size,
+                        Mm(x0 + 0.5),
+                        Mm(y0 - cell_mm * 0.75),
+                        &font,
+                    );
                 }
             }
 
@@ -134,7 +146,13 @@ pub fn generate_shaped_pattern_pdf(
             for (local_x, gx) in (col_start..col_end).enumerate() {
                 if gx % AXIS_LABEL_INTERVAL == 0 {
                     let x = grid_origin_x + local_x as f32 * cell_mm;
-                    layer.use_text(format!("{}", gx + 1), 6.0, Mm(x), Mm(grid_top_y + 1.5), &font);
+                    layer.use_text(
+                        format!("{}", gx + 1),
+                        6.0,
+                        Mm(x),
+                        Mm(grid_top_y + 1.5),
+                        &font,
+                    );
                 }
             }
             for (local_y, rft) in (rft_start..rft_end).enumerate() {
@@ -171,7 +189,13 @@ pub fn generate_shaped_pattern_pdf(
     // Key page: tension-color meaning, plus any explicit per-stitch colors used.
     let (key_page, key_layer_idx) = doc.add_page(Mm(page.width_mm), Mm(page.height_mm), "Layer 1");
     let layer = doc.get_page(key_page).get_layer(key_layer_idx);
-    layer.use_text(format!("{pattern_name} - key"), 14.0, Mm(margin_mm), Mm(page.height_mm - margin_mm), &font_bold);
+    layer.use_text(
+        format!("{pattern_name} - key"),
+        14.0,
+        Mm(margin_mm),
+        Mm(page.height_mm - margin_mm),
+        &font_bold,
+    );
     let tension_rows: [(&str, (f32, f32, f32)); 3] = [
         ("Normal tension", (0.15, 0.55, 0.15)),
         ("Loose", (0.15, 0.35, 0.75)),
@@ -194,15 +218,33 @@ pub fn generate_shaped_pattern_pdf(
     if !custom_colors.is_empty() {
         let start_y = page.height_mm - margin_mm - 15.0 - (tension_rows.len() as f32) * 8.0 - 8.0;
         layer.set_fill_color(Color::Rgb(Rgb::new(0.0, 0.0, 0.0, None)));
-        layer.use_text("Explicit stitch colors:", 11.0, Mm(margin_mm), Mm(start_y), &font_bold);
+        layer.use_text(
+            "Explicit stitch colors:",
+            11.0,
+            Mm(margin_mm),
+            Mm(start_y),
+            &font_bold,
+        );
         for (i, c) in custom_colors.iter().enumerate() {
             let y = start_y - 8.0 - (i as f32) * 8.0;
             let name = abyssal_thread_export::nearest_color_name(*c);
-            layer.set_fill_color(Color::Rgb(Rgb::new(c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, None)));
-            let rect = Rect::new(Mm(margin_mm), Mm(y - 5.0), Mm(margin_mm + 6.0), Mm(y + 1.0)).with_mode(printpdf::path::PaintMode::Fill);
+            layer.set_fill_color(Color::Rgb(Rgb::new(
+                c[0] as f32 / 255.0,
+                c[1] as f32 / 255.0,
+                c[2] as f32 / 255.0,
+                None,
+            )));
+            let rect = Rect::new(Mm(margin_mm), Mm(y - 5.0), Mm(margin_mm + 6.0), Mm(y + 1.0))
+                .with_mode(printpdf::path::PaintMode::Fill);
             layer.add_rect(rect);
             layer.set_fill_color(Color::Rgb(Rgb::new(0.0, 0.0, 0.0, None)));
-            layer.use_text(format!("#{:02x}{:02x}{:02x} (~ {name})", c[0], c[1], c[2]), 10.0, Mm(margin_mm + 9.0), Mm(y - 3.0), &font);
+            layer.use_text(
+                format!("#{:02x}{:02x}{:02x} (~ {name})", c[0], c[1], c[2]),
+                10.0,
+                Mm(margin_mm + 9.0),
+                Mm(y - 3.0),
+                &font,
+            );
         }
     }
 
@@ -218,8 +260,18 @@ pub fn print_shaped_via_system_default(
     margin_mm: f32,
 ) -> anyhow::Result<()> {
     let mut path = std::env::temp_dir();
-    let cleaned: String = pattern_name.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
-    path.push(format!("{}_shaped_print.pdf", if cleaned.is_empty() { "pattern".to_string() } else { cleaned }));
+    let cleaned: String = pattern_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    path.push(format!(
+        "{}_shaped_print.pdf",
+        if cleaned.is_empty() {
+            "pattern".to_string()
+        } else {
+            cleaned
+        }
+    ));
     generate_shaped_pattern_pdf(graph, cell_mm, pattern_name, &path, page, margin_mm)?;
     opener::open(&path)?;
     Ok(())
@@ -299,13 +351,20 @@ mod tests {
             PageSize::US_LETTER,
             12.7,
         );
-        assert!(result.is_ok(), "generate_shaped_pattern_pdf failed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "generate_shaped_pattern_pdf failed: {result:?}"
+        );
 
         let metadata = std::fs::metadata(&out_path).expect("output PDF should exist");
         // A real multi-page PDF (grid pages + a key page) is always at
         // least a few KB - a near-empty file would mean generation
         // silently produced a broken/truncated document.
-        assert!(metadata.len() > 500, "output PDF is suspiciously small: {} bytes", metadata.len());
+        assert!(
+            metadata.len() > 500,
+            "output PDF is suspiciously small: {} bytes",
+            metadata.len()
+        );
 
         let _ = std::fs::remove_file(&out_path);
     }
@@ -318,10 +377,16 @@ mod tests {
         let g = small_test_graph();
         assert!(g.graph.node_weights().all(|n| n.color.is_none()));
         let dir = std::env::temp_dir();
-        let out_path = dir.join(format!("abyssal_thread_test_nocolor_{}.pdf", std::process::id()));
+        let out_path = dir.join(format!(
+            "abyssal_thread_test_nocolor_{}.pdf",
+            std::process::id()
+        ));
         let result =
             generate_shaped_pattern_pdf(&g, 6.0, "no color", &out_path, PageSize::US_LETTER, 12.7);
-        assert!(result.is_ok(), "generate_shaped_pattern_pdf failed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "generate_shaped_pattern_pdf failed: {result:?}"
+        );
         let _ = std::fs::remove_file(&out_path);
     }
 
@@ -338,10 +403,22 @@ mod tests {
         abyssal_thread_layout::layout_ring(&mut g, gauge);
 
         let dir = std::env::temp_dir();
-        let out_path = dir.join(format!("abyssal_thread_test_color_{}.pdf", std::process::id()));
-        let result =
-            generate_shaped_pattern_pdf(&g, 6.0, "with color", &out_path, PageSize::US_LETTER, 12.7);
-        assert!(result.is_ok(), "generate_shaped_pattern_pdf failed: {result:?}");
+        let out_path = dir.join(format!(
+            "abyssal_thread_test_color_{}.pdf",
+            std::process::id()
+        ));
+        let result = generate_shaped_pattern_pdf(
+            &g,
+            6.0,
+            "with color",
+            &out_path,
+            PageSize::US_LETTER,
+            12.7,
+        );
+        assert!(
+            result.is_ok(),
+            "generate_shaped_pattern_pdf failed: {result:?}"
+        );
         let _ = std::fs::remove_file(&out_path);
     }
 }

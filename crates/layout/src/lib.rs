@@ -50,7 +50,10 @@ impl Default for Gauge {
     /// anywhere `layout_ring`/`analyze_tension` used to take no gauge
     /// argument at all is a no-op change in behavior.
     fn default() -> Self {
-        Gauge { sts_per_4in: REFERENCE_STS_PER_4IN, rows_per_4in: REFERENCE_ROWS_PER_4IN }
+        Gauge {
+            sts_per_4in: REFERENCE_STS_PER_4IN,
+            rows_per_4in: REFERENCE_ROWS_PER_4IN,
+        }
     }
 }
 
@@ -233,11 +236,19 @@ pub fn relax(g: &mut StitchGraph, gauge: Gauge, iterations: usize) {
         match edge.weight() {
             abyssal_thread_core::StitchEdge::Sequence => {
                 let rest = g.graph[edge.source()].kind.baseline_width_mm() * gauge.width_scale();
-                springs.push(Spring { a: edge.source(), b: edge.target(), rest });
+                springs.push(Spring {
+                    a: edge.source(),
+                    b: edge.target(),
+                    rest,
+                });
             }
             abyssal_thread_core::StitchEdge::Parent => {
                 let rest = g.graph[edge.target()].kind.baseline_height_mm() * gauge.height_scale();
-                springs.push(Spring { a: edge.source(), b: edge.target(), rest });
+                springs.push(Spring {
+                    a: edge.source(),
+                    b: edge.target(),
+                    rest,
+                });
             }
         }
     }
@@ -260,7 +271,8 @@ pub fn relax(g: &mut StitchGraph, gauge: Gauge, iterations: usize) {
         let mut displacement: HashMap<petgraph::graph::NodeIndex, Vec3> = HashMap::new();
 
         for spring in &springs {
-            let (Some(pa), Some(pb)) = (g.graph[spring.a].position, g.graph[spring.b].position) else {
+            let (Some(pa), Some(pb)) = (g.graph[spring.a].position, g.graph[spring.b].position)
+            else {
                 continue;
             };
             let delta = pb - pa;
@@ -286,7 +298,7 @@ pub fn relax(g: &mut StitchGraph, gauge: Gauge, iterations: usize) {
                 };
                 let delta = pb - pa;
                 let dist = delta.length();
-                if dist < 1e-6 || dist >= REPULSION_RADIUS_MM {
+                if !(1e-6..REPULSION_RADIUS_MM).contains(&dist) {
                     continue;
                 }
                 let push = delta.normalized().scale((REPULSION_RADIUS_MM - dist) * 0.5);
@@ -298,8 +310,11 @@ pub fn relax(g: &mut StitchGraph, gauge: Gauge, iterations: usize) {
         }
 
         for (node, delta) in displacement {
-            let clamped =
-                if delta.length() > MAX_STEP_MM { delta.normalized().scale(MAX_STEP_MM) } else { delta };
+            let clamped = if delta.length() > MAX_STEP_MM {
+                delta.normalized().scale(MAX_STEP_MM)
+            } else {
+                delta
+            };
             if let Some(pos) = g.graph[node].position {
                 g.graph[node].position = Some(pos + clamped);
             }
@@ -326,11 +341,18 @@ struct RepulsionGrid {
 
 impl RepulsionGrid {
     fn build(g: &StitchGraph, round: &[petgraph::graph::NodeIndex], cell_size: f32) -> Self {
-        let mut buckets: std::collections::HashMap<(i32, i32, i32), Vec<petgraph::graph::NodeIndex>> =
-            std::collections::HashMap::new();
+        let mut buckets: std::collections::HashMap<
+            (i32, i32, i32),
+            Vec<petgraph::graph::NodeIndex>,
+        > = std::collections::HashMap::new();
         for &idx in round {
-            let Some(pos) = g.graph[idx].position else { continue };
-            buckets.entry(Self::cell_of(pos, cell_size)).or_default().push(idx);
+            let Some(pos) = g.graph[idx].position else {
+                continue;
+            };
+            buckets
+                .entry(Self::cell_of(pos, cell_size))
+                .or_default()
+                .push(idx);
         }
         RepulsionGrid { buckets }
     }
@@ -363,9 +385,18 @@ impl RepulsionGrid {
             // so each cross-cell pair is produced exactly once rather than
             // twice from each cell's perspective.
             const FORWARD_NEIGHBORS: [(i32, i32, i32); 13] = [
-                (1, 0, 0), (1, 1, 0), (0, 1, 0), (-1, 1, 0),
-                (1, 0, 1), (1, 1, 1), (0, 1, 1), (-1, 1, 1),
-                (1, 0, -1), (1, 1, -1), (0, 1, -1), (-1, 1, -1),
+                (1, 0, 0),
+                (1, 1, 0),
+                (0, 1, 0),
+                (-1, 1, 0),
+                (1, 0, 1),
+                (1, 1, 1),
+                (0, 1, 1),
+                (-1, 1, 1),
+                (1, 0, -1),
+                (1, 1, -1),
+                (0, 1, -1),
+                (-1, 1, -1),
                 (0, 0, 1),
             ];
             for (dx, dy, dz) in FORWARD_NEIGHBORS {
@@ -389,7 +420,11 @@ pub struct TensionReport {
 }
 
 pub fn summarize_tension(g: &StitchGraph) -> TensionReport {
-    let mut r = TensionReport { loose: 0, stretched: 0, normal: 0 };
+    let mut r = TensionReport {
+        loose: 0,
+        stretched: 0,
+        normal: 0,
+    };
     for node in g.graph.node_weights() {
         match node.tension {
             Some(TensionState::Loose) => r.loose += 1,
@@ -435,11 +470,20 @@ mod tests {
         g.graph[a].position = Some(Vec3::new(0.0, 0.0, 0.0));
         g.graph[b].position = Some(Vec3::new(1.0, 0.0, 0.0));
 
-        let before = g.graph[a].position.unwrap().distance(g.graph[b].position.unwrap());
+        let before = g.graph[a]
+            .position
+            .unwrap()
+            .distance(g.graph[b].position.unwrap());
         relax(&mut g, Gauge::default(), 30);
-        let after = g.graph[a].position.unwrap().distance(g.graph[b].position.unwrap());
+        let after = g.graph[a]
+            .position
+            .unwrap()
+            .distance(g.graph[b].position.unwrap());
 
-        assert!(after > before, "expected relax to pull the pair apart toward baseline width, got {before} -> {after}");
+        assert!(
+            after > before,
+            "expected relax to pull the pair apart toward baseline width, got {before} -> {after}"
+        );
     }
 
     #[test]
@@ -463,7 +507,9 @@ mod tests {
         use abyssal_thread_core::StitchKind;
 
         let mut g = StitchGraph::new();
-        let nodes: Vec<_> = (0..3).map(|_| g.add_stitch(StitchKind::SingleCrochet, 0, None)).collect();
+        let nodes: Vec<_> = (0..3)
+            .map(|_| g.add_stitch(StitchKind::SingleCrochet, 0, None))
+            .collect();
         // All three within 1mm of each other - well inside one 6mm cell.
         for (i, &n) in nodes.iter().enumerate() {
             g.graph[n].position = Some(Vec3::new(i as f32 * 0.5, 0.0, 0.0));
@@ -488,7 +534,11 @@ mod tests {
         let round = vec![a, b];
         let grid = RepulsionGrid::build(&g, &round, 6.0);
         let pairs = grid.candidate_pairs();
-        assert_eq!(pairs.len(), 1, "expected exactly one candidate pair, got {pairs:?}");
+        assert_eq!(
+            pairs.len(),
+            1,
+            "expected exactly one candidate pair, got {pairs:?}"
+        );
     }
 
     #[test]
@@ -513,18 +563,20 @@ mod tests {
         // grid-based version has to actually find all of them via
         // same-cell/adjacent-cell lookups to produce the same behavior.
         let mut g = StitchGraph::new();
-        let nodes: Vec<_> = (0..8).map(|_| g.add_stitch(StitchKind::SingleCrochet, 0, None)).collect();
+        let nodes: Vec<_> = (0..8)
+            .map(|_| g.add_stitch(StitchKind::SingleCrochet, 0, None))
+            .collect();
         for (i, &n) in nodes.iter().enumerate() {
             // All 8 crammed into a 3.5mm span - far tighter than the 6mm
             // repulsion radius, so every pair should push apart.
             g.graph[n].position = Some(Vec3::new(i as f32 * 0.5, 0.0, 0.0));
         }
 
-        let before_span =
-            g.graph[*nodes.last().unwrap()].position.unwrap().x - g.graph[nodes[0]].position.unwrap().x;
+        let before_span = g.graph[*nodes.last().unwrap()].position.unwrap().x
+            - g.graph[nodes[0]].position.unwrap().x;
         relax(&mut g, Gauge::default(), 30);
-        let after_span =
-            g.graph[*nodes.last().unwrap()].position.unwrap().x - g.graph[nodes[0]].position.unwrap().x;
+        let after_span = g.graph[*nodes.last().unwrap()].position.unwrap().x
+            - g.graph[nodes[0]].position.unwrap().x;
 
         assert!(
             after_span > before_span,

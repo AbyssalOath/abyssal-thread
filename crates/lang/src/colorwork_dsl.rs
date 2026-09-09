@@ -38,7 +38,10 @@ mod tests {
         let dsl = color_grid_to_dsl(Some("test"), &grid);
         let pattern = parser::parse(&dsl).expect("re-parse should succeed");
         assert_eq!(pattern.name.as_deref(), Some("test"));
-        let parsed_grid = pattern.color_grid.clone().expect("color_grid should be present");
+        let parsed_grid = pattern
+            .color_grid
+            .clone()
+            .expect("color_grid should be present");
         assert_eq!(parsed_grid.width, 3);
         assert_eq!(parsed_grid.height, 2);
         assert_eq!(parsed_grid.get(1, 0), [200, 30, 30]);
