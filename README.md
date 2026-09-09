@@ -40,9 +40,9 @@ all from the same pattern.
 Requires a recent [Rust toolchain](https://rustup.rs/).
 
 On Linux, you'll also need a few system libraries before `cargo build`
-will succeed: `sudo apt install libgtk-3-dev libfontconfig1-dev
-libfreetype6-dev` (Debian/Ubuntu; adjust for your distro). Windows and
-macOS need nothing extra - both dependencies use OS-native APIs there.
+will succeed: 
+`sudo apt install libfontconfig1-dev libfreetype6-dev` (Debian/Ubuntu; adjust for your distro).
+Windows and macOS need nothing extra - their font handling uses OS-native APIs.
 
 ```bash
 git clone https://github.com/AbyssalOath/abyssal-thread.git
