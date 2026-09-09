@@ -224,3 +224,124 @@ pub fn print_shaped_via_system_default(
     opener::open(&path)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use abyssal_thread_core::graph::StitchEdge;
+    use abyssal_thread_core::StitchKind;
+
+    #[test]
+    fn explicit_color_overrides_tension() {
+        // An explicit `~RRGGBB` color should win over tension coloring
+        // entirely - a stitch shouldn't lose its actual assigned color
+        // just because it also happens to be flagged loose/stretched.
+        let (r, g, b) = stitch_print_rgb(Some([255, 0, 0]), Some(TensionState::Stretched));
+        assert_eq!((r, g, b), (1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn tension_states_map_to_distinct_colors() {
+        let normal = stitch_print_rgb(None, Some(TensionState::Normal));
+        let loose = stitch_print_rgb(None, Some(TensionState::Loose));
+        let stretched = stitch_print_rgb(None, Some(TensionState::Stretched));
+        // All three distinct from each other...
+        assert_ne!(normal, loose);
+        assert_ne!(normal, stretched);
+        assert_ne!(loose, stretched);
+        // ...and from the "no tension analyzed" fallback.
+        let none = stitch_print_rgb(None, None);
+        assert_ne!(normal, none);
+        assert_ne!(loose, none);
+        assert_ne!(stretched, none);
+    }
+
+    #[test]
+    fn no_color_and_no_tension_is_black() {
+        // Deliberately black (not viewport.rs's on-screen gray) - see the
+        // function's own doc comment for why: gray text is hard to read
+        // on white paper.
+        assert_eq!(stitch_print_rgb(None, None), (0.0, 0.0, 0.0));
+    }
+
+    /// Builds a tiny but real, connected 3-round shaped pattern (a magic
+    /// ring -> increase round -> plain round), positions it with the
+    /// actual layout engine, and analyzes tension - so the PDF generator
+    /// below is exercised against a graph shaped exactly like a real
+    /// pattern's output, not a hand-rolled one that happens to avoid edge
+    /// cases the real pipeline hits (an empty round, a missing position, etc).
+    fn small_test_graph() -> StitchGraph {
+        let pattern = abyssal_thread_lang::parser::parse("6sc\n(sc, inc) * 6\n12sc\n")
+            .expect("fixture pattern should parse");
+        let mut g = abyssal_thread_lang::eval::eval(&pattern).expect("fixture pattern should eval");
+        let gauge = abyssal_thread_layout::Gauge::default();
+        abyssal_thread_layout::layout_ring(&mut g, gauge);
+        abyssal_thread_layout::analyze_tension(&mut g, gauge);
+        g
+    }
+
+    #[test]
+    fn generates_a_real_nonempty_pdf_file() {
+        // The exact kind of test that would have caught the print.rs
+        // compute_tiling/TilingPlan signature mismatch (an earlier real
+        // regression in the sibling colorwork print path) before a human
+        // ever ran `cargo build` and hit it - actually calling the
+        // generator end to end, not just its pure sub-functions.
+        let g = small_test_graph();
+        let dir = std::env::temp_dir();
+        let out_path = dir.join(format!("abyssal_thread_test_{}.pdf", std::process::id()));
+
+        let result = generate_shaped_pattern_pdf(
+            &g,
+            6.0,
+            "test pattern",
+            &out_path,
+            PageSize::US_LETTER,
+            12.7,
+        );
+        assert!(result.is_ok(), "generate_shaped_pattern_pdf failed: {result:?}");
+
+        let metadata = std::fs::metadata(&out_path).expect("output PDF should exist");
+        // A real multi-page PDF (grid pages + a key page) is always at
+        // least a few KB - a near-empty file would mean generation
+        // silently produced a broken/truncated document.
+        assert!(metadata.len() > 500, "output PDF is suspiciously small: {} bytes", metadata.len());
+
+        let _ = std::fs::remove_file(&out_path);
+    }
+
+    #[test]
+    fn handles_a_graph_with_no_explicit_colors() {
+        // Regression guard for the "Explicit stitch colors:" section,
+        // which should just not appear (not panic on an empty Vec) when
+        // no stitch has a `~RRGGBB` color set.
+        let g = small_test_graph();
+        assert!(g.graph.node_weights().all(|n| n.color.is_none()));
+        let dir = std::env::temp_dir();
+        let out_path = dir.join(format!("abyssal_thread_test_nocolor_{}.pdf", std::process::id()));
+        let result =
+            generate_shaped_pattern_pdf(&g, 6.0, "no color", &out_path, PageSize::US_LETTER, 12.7);
+        assert!(result.is_ok(), "generate_shaped_pattern_pdf failed: {result:?}");
+        let _ = std::fs::remove_file(&out_path);
+    }
+
+    #[test]
+    fn handles_an_explicit_per_stitch_color() {
+        // Round-trips a graph through the ~RRGGBB path (StitchNode::color)
+        // to exercise the "Explicit stitch colors:" key-page section too.
+        let mut g = StitchGraph::new();
+        let a = g.add_stitch(StitchKind::SingleCrochet, 0, None);
+        g.set_color(a, [255, 0, 0]);
+        let b = g.add_stitch(StitchKind::SingleCrochet, 0, None);
+        g.connect(a, b, StitchEdge::Sequence);
+        let gauge = abyssal_thread_layout::Gauge::default();
+        abyssal_thread_layout::layout_ring(&mut g, gauge);
+
+        let dir = std::env::temp_dir();
+        let out_path = dir.join(format!("abyssal_thread_test_color_{}.pdf", std::process::id()));
+        let result =
+            generate_shaped_pattern_pdf(&g, 6.0, "with color", &out_path, PageSize::US_LETTER, 12.7);
+        assert!(result.is_ok(), "generate_shaped_pattern_pdf failed: {result:?}");
+        let _ = std::fs::remove_file(&out_path);
+    }
+}

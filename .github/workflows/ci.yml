@@ -5,7 +5,8 @@ on:
   pull_request:
 
 jobs:
-  build:
+  test:
+    name: check, test, build
     runs-on: ubuntu-latest
 
     steps:
@@ -18,7 +19,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libfreetype6-dev
+          sudo apt-get install -y libgtk-3-dev libfontconfig1-dev libfreetype6-dev
 
       - name: Check
         run: cargo check --workspace
@@ -28,3 +29,44 @@ jobs:
 
       - name: Build
         run: cargo build --workspace --release
+
+  fmt:
+    name: cargo fmt --check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --all -- --check
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libfontconfig1-dev libfreetype6-dev
+      - name: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Checks Cargo.lock against the RustSec advisory database
+      # (https://rustsec.org) - known-vulnerable or yanked dependency
+      # versions fail the build. Worth having specifically here since
+      # image import parses untrusted, user-supplied files through the
+      # `image` crate - exactly the kind of dependency where a parser
+      # vulnerability would actually matter.
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

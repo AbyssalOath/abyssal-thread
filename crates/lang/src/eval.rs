@@ -624,4 +624,57 @@ mod tests {
             assert_eq!(g.graph[idx].def_origin.as_deref(), Some("p"));
         }
     }
+
+    #[test]
+    fn a_realistic_large_flat_pattern_evaluates_correctly() {
+        // A big flat tube (e.g. a long scarf or cowl worked in the round)
+        // - 300 separate rounds of 300sc each, 90,000 stitches total.
+        // Comfortably larger than any pattern a real person would
+        // realistically work by hand, but still well under
+        // MAX_TOTAL_STITCHES (500,000) - this is the "confirm the limit
+        // doesn't false-positive-reject something a real large pattern
+        // could actually need" half of exercising it, as opposed to
+        // `rejects_a_compounding_stitch_count_blowup`'s "confirm it
+        // actually catches a runaway" half. Built with `.repeat` rather
+        // than a `(300sc) * 300` repeat *group* - that syntax multiplies
+        // stitches within a single round, not across separate rounds,
+        // which isn't what "300 rounds" needs here.
+        let src: String = "300sc\n".repeat(300);
+        let pattern = parser::parse(&src).expect("realistic large pattern should parse");
+        let g = eval(&pattern).expect("realistic large pattern should evaluate without hitting the safety limit");
+        assert_eq!(g.stitch_count(), 300 * 300);
+        assert_eq!(g.round_count(), 300);
+    }
+ 
+    #[test]
+    fn a_pattern_just_under_the_total_stitch_limit_succeeds() {
+        // 499,900 stitches (one round, via a repeat group) - deliberately
+        // close to (but under) MAX_TOTAL_STITCHES, confirming the eval-loop
+        // check (`g.stitch_count() > MAX_TOTAL_STITCHES`, a *strict*
+        // inequality) doesn't off-by-one reject a pattern that's actually
+        // still within budget.
+        let src = "(100sc) * 4999\n";
+        let pattern = parser::parse(src).expect("pattern should parse");
+        let g = eval(&pattern).expect("a pattern just under the total-stitch limit should still succeed");
+        assert_eq!(g.stitch_count(), 499_900);
+    }
+ 
+    #[test]
+    fn a_pattern_with_many_small_custom_stitch_invocations_evaluates_correctly() {
+        // Realistic use of a custom stitch at scale: a shell-stitch trim
+        // used many times across a large pattern, rather than one huge
+        // invocation - exercises that per-invocation def_origin tagging
+        // and the compounding-blowup check's recursive out.len() check
+        // both stay correct (and fast enough to finish this test) at a
+        // realistic "large real pattern" scale rather than just a handful
+        // of invocations like the other DEF-focused tests use.
+        let src = "DEF: shell = 3dc, ch1\n300sc\n(100shell) * 3\n";
+        let pattern = parser::parse(src).expect("pattern should parse");
+        let g = eval(&pattern).expect("many custom-stitch invocations should evaluate without hitting the safety limit");
+        // 3 repeats * 100 invocations * 4 stitches per "shell" (3dc + ch1).
+        assert_eq!(g.rounds[1].len(), 3 * 100 * 4);
+        for &idx in &g.rounds[1] {
+            assert_eq!(g.graph[idx].def_origin.as_deref(), Some("shell"));
+        }
+    }
 }

@@ -52,7 +52,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libfreetype6-dev
+          sudo apt-get install -y libgtk-3-dev libfontconfig1-dev libfreetype6-dev
 
       - name: Build
         run: cargo build --workspace --release --target ${{ matrix.target }}
