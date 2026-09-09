@@ -3,7 +3,10 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.2.0]
+## [0.2.1]
+
+### Fixed
+- Updated `rand` to address an unsoundness issue with custom loggers using `rand::rng()`.
 
 Initial release. Highlights:
 
