@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.2.1]
+## [0.2.1] - 2026-09-08
 
 ### Changed
 - `printpdf` reverted to 0.7 after a 0.9.1 upgrade attempt turned out to
@@ -60,7 +60,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   without an unverified, likely-incompatible `printpdf` rewrite-level
   migration (see "Changed" above and ARCHITECTURE.md's TODO list).
 
-## [0.2.0]
+## [0.2.0] - 2026-09-08
 
 ### Added - GUI
 - Shaped-pattern print/PDF export (`print_shaped.rs`): multi-page tiled
@@ -76,7 +76,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   existing bundled-family dropdown and manual "browse for a font file"
   option - three ways to pick a font now, not one.
 
-## [0.1.0]
+## [0.1.0] - 2026-09-07
 
 Initial release. Highlights:
 
