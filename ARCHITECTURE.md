@@ -42,10 +42,17 @@ touching the colorwork grid at all.
 ```
 abyssal-thread/
 ├── Cargo.toml              workspace root
+├── .cargo/
+│   └── audit.toml          cargo-audit config: accepted/ignored advisories,
+│                            each with a written justification (see
+│                            "Dependency security" below) - cargo-audit only
+│                            reads this path (or ~/.cargo/audit.toml), NOT a
+│                            repo-root audit.toml, despite that being an easy
+│                            file to put there by mistake
 ├── crates/
 │   ├── core/               StitchKind, StitchGraph (petgraph), Vec3,
 │   │                       ColorGrid, StitchGraph::from_color_grid
-│   ├── lang/               lexer, parser, AST, eval (DSL -> StitchGraph),
+│   ├── lang/                lexer, parser, AST, eval (DSL -> StitchGraph),
 │   │                       custom-stitch alias + raw-geometry expansion
 │   │                       (raw_def.rs), COLORGRID: block parsing +
 │   │                       color_grid_to_dsl serializer
@@ -70,17 +77,25 @@ abyssal-thread/
 │                           (3D), image_import.rs (photo import +
 │                           GridImportPayload), text_import.rs (font
 │                           dropdown + bold/italic, per-line centering),
-│                           fonts.rs (bundled FontFamily registry),
+│                           fonts.rs (bundled FontFamily registry +
 │                           OS font enumeration via font-kit),
 │                           def_builder.rs (point-and-click DEF alias
-│                           builder),
-│                           recent_colors.rs (shared color-picker history)
-├── .github/workflows/      ci.yml (test/fmt/clippy/audit on push),
-│                           release.yml (tagged builds for Win/macOS/Linux)
-└── examples/
-    ├── sphere.cgp                  amigurumi sphere (inc/dec shaping)
-    ├── motif_with_attachment.cgp   labels, @attach, DEF line
-    └── shell_stitch.cgp            custom stitch alias expansion
+│                           builder), recent_colors.rs (shared
+│                           color-picker history)
+├── .github/
+│   ├── workflows/           ci.yml (check/test/build + fmt/clippy/audit as
+│   │                        separate jobs, on every push and PR),
+│   │                        release.yml (tagged builds for Win/macOS/Linux)
+│   └── ISSUE_TEMPLATE/      bug_report.md
+├── examples/
+│   ├── sphere.cgp                  amigurumi sphere (inc/dec shaping)
+│   ├── motif_with_attachment.cgp   labels, @attach, DEF line
+│   └── shell_stitch.cgp            custom stitch alias expansion
+├── screenshots/             GUI demo GIFs, referenced from README.md
+├── LICENSE
+├── SECURITY.md              private vulnerability reporting instructions
+└── WHAT_TO_TEST.md          tester-facing "what to poke at", separate from
+                              this file and README.md's polished pitch
 ```
 
 ## Try it
@@ -140,7 +155,11 @@ into one child) - see `crates/lang/src/eval.rs`.
 stitches total (`eval::MAX_TOTAL_STITCHES`) - both return a clear parse
 error rather than letting an obvious typo (`999999999shell`) or a
 compounding multiplication (a `DEF` body's own repeat times a large
-invocation count) hang or exhaust memory.
+invocation count) hang or exhaust memory. Both limits have been exercised
+against realistic large patterns (a 90,000-stitch multi-round pattern, a
+499,900-stitch pattern right at the boundary, 300 custom-stitch invocations
+at scale) to confirm they don't false-positive-reject legitimate large
+patterns - see "Testing" below.
 
 ## What's real vs. stubbed
 
@@ -253,23 +272,36 @@ approach). Includes an on-page reminder to select Color rather than
 Grayscale/Black & White in the print dialog, since that's a very common
 printer default and the most likely explanation if a printed pattern loses
 its color (the PDF's actual color data was verified directly at the byte
-level, not just visually).
-Shaped patterns print too now (`print_shaped.rs`): each stitch's
-abbreviation, colored by tension state or an explicit per-stitch color
-when one's set, with round 0 at the *bottom* of the chart (matching
-real bottom-up working order, the opposite of colorwork's top-down photo
-convention) and a tension/color key page instead of a hex legend.
+level, not just visually). Shaped patterns print too (`print_shaped.rs`):
+each stitch's abbreviation, colored by tension state or an explicit
+per-stitch color when one's set, with round 0 at the *bottom* of the
+chart (matching real bottom-up working order, the opposite of colorwork's
+top-down photo convention) and a tension/color key page instead of a hex
+legend.
+
+**Working - dependency security process:** `.cargo/audit.toml` lists
+every currently-accepted advisory with a written justification per entry
+(unmaintained-but-low-risk-transitive, or - for the one real vulnerability,
+`RUSTSEC-2026-0187` in `lopdf` via `printpdf` 0.7 - a specific reachability
+argument: this app only *writes* PDFs from scratch, nothing calls
+`lopdf::Document::load`/`load_mem` on file input, so the unbounded-recursion
+parsing bug the advisory describes has no code path to trigger through.
+`cargo audit` (both locally and in CI's `audit` job) reads this file
+automatically - no separate `--ignore` flags needed, and no advisory is
+silently allowed without a reason recorded next to it.
 
 **Stubbed / TODO:**
 
-- **`cargo audit`, `fmt`, and `clippy` are real CI gates** (`ci.yml`,
-  `-D warnings` on clippy) but haven't been exercised against a large
-  real-world pattern set yet - the safety limits above (10,000/500,000)
-  are reasoned estimates, not load-tested numbers.
-- **No test coverage yet for the three newest features** - `print_shaped.rs`,
-  `def_builder.rs`, and the `font-kit` enumeration/resolution functions
-  in `fonts.rs` all shipped without `#[cfg(test)]` cases, unlike
-  everything else in "Testing" below.
+- **`printpdf` is pinned at 0.7, not upgraded.** `printpdf` 0.9.x still
+  depends on the same vulnerable `lopdf` version the advisory above is
+  about (upgrading to it would mean a real API migration for zero
+  security benefit), and `printpdf` 0.12.x (current latest) appears to be
+  a ground-up rewrite centered on `azul-layout`-based HTML-to-PDF
+  rendering rather than the low-level imperative "get a page, draw lines
+  and text on it" API `print.rs`/`print_shaped.rs` depend on - unverified
+  whether that API still exists there at all. Revisit if `printpdf` ever
+  ships a version that both pulls in a fixed `lopdf` *and* keeps this
+  codebase's drawing API compatible.
 - **No accessibility (AccessKit) support** - deliberately disabled, not
   merely absent. `accesskit` pulled in a vulnerable/unmaintained
   dependency chain on Linux (`quick-xml` et al.) with no corresponding
@@ -285,30 +317,42 @@ convention) and a tension/color key page instead of a hex legend.
 counts, repeats, modifiers, labels/attach, custom-stitch expansion, cycle
 detection, the count-cap safety limits), eval (increase/decrease
 parent-slot math, colorwork graph construction, raw-geometry expansion,
-def_origin tagging, the compounding-blowup guard), layout (flat-grid
+def_origin tagging, the compounding-blowup guard, and the three
+realistic-large-pattern exercises described above), layout (flat-grid
 placement, relax's spring/repulsion behavior including the spatial-grid
 rewrite), export (color naming, SVG row-order regression tests), image
 import (resize/quantization regression tests, including the
-farthest-point-seeding fix and the degenerate-image guard), and print
+farthest-point-seeding fix and the degenerate-image guard), print
 (tiling-math regression tests - exact page counts pinned against
 visually-verified output, plus a "every cell covered exactly once, no
-gaps" invariant check) - plus golden tests in `crates/lang/tests/golden.rs`
-that compile the bundled example `.cgp` patterns end-to-end and check the
-resulting stitch graph's shape.
+gaps" invariant check), print_shaped (`stitch_print_rgb` coverage plus
+end-to-end smoke tests that generate real PDF files and check for
+non-trivial output), def_builder (name validation and DEF-line formatting
+extracted into pure functions, plus a round-trip test through the real
+parser), and fonts (deterministic bundled-`FontFamily` data checks - valid
+TTF/OTF headers, correct `bytes_for` variant selection, unique names -
+plus environment-tolerant tests for the `font-kit` system enumeration
+functions that don't assume anything about what's actually installed on
+the machine running them) - plus golden tests in
+`crates/lang/tests/golden.rs` that compile the bundled example `.cgp`
+patterns end-to-end and check the resulting stitch graph's shape.
 
-CI (`.github/workflows/ci.yml`) runs `cargo test`, `cargo fmt --all --
---check`, `cargo clippy --workspace --all-targets -- -D warnings`, and a
-`cargo-audit` check against the RustSec advisory database on every push
-and PR.
+CI (`.github/workflows/ci.yml`) runs `cargo test` (plus `check`/`build`),
+`cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --
+-D warnings`, and `cargo audit` (reading `.cargo/audit.toml` automatically)
+as four separate jobs on every push and PR.
 
 ## Suggested next milestones
 
-1. Shaped-pattern PDF/print export, to match what colorwork already has.
-2. Test coverage for the three newest features (see the new Stubbed/TODO
-   bullet above) - they're the only untested corner of the codebase now.
-3. Add `libfontconfig1-dev`/`libfreetype6-dev` to the Linux job in
-   `ci.yml` and `release.yml` - `font-kit` needs them at build time and
-   CI will start failing on Linux the moment this merges if they're missing.
-4. Exercise the safety limits (10,000 literal / 500,000 total stitches)
-   against real large patterns to confirm they're generous enough in
-   practice, not just in theory.
+1. If `printpdf` ever ships a version with both a fixed `lopdf` and a
+   compatible drawing API, migrate - see the `Stubbed / TODO` entry above.
+2. A `DEF`-authoring UI for the raw-geometry form (`%`/`%-N`), so custom
+   stitches don't require hand-writing DSL for that half of the grammar
+   either - the alias form already has one (`def_builder.rs`).
+3. More bundled font families (`gui/fonts.rs`) if the current curated set
+   feels limiting - system-font enumeration via `font-kit` already covers
+   "use whatever's installed" for anyone who wants that instead.
+4. Periodically review `.cargo/audit.toml`'s accepted-advisory list - each
+   entry there is a decision made under specific conditions (no available
+   fix, or a specific reachability argument); worth re-checking those
+   conditions still hold rather than letting the list grow stale.

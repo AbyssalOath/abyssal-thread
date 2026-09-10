@@ -5,8 +5,78 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.2.1]
 
+### Changed
+- `printpdf` reverted to 0.7 after a 0.9.1 upgrade attempt turned out to
+  fix nothing (0.9.1 still depends on the same vulnerable `lopdf` version)
+  while requiring a real API migration - see "Security" below for how the
+  underlying advisory is actually handled instead.
+- `eframe`/`egui` bumped to 0.29.1, fixing `RUSTSEC-2026-0257`
+  (`webbrowser` argument injection) for real. AccessKit (accessibility
+  support) disabled as part of this bump rather than carried forward - see
+  ARCHITECTURE.md's "Stubbed / TODO" for why.
+- `.cargo/audit.toml` (moved from a repo-root `audit.toml`, which
+  `cargo-audit` never actually reads - it only reads `.cargo/audit.toml`
+  or `~/.cargo/audit.toml`). CI's `audit` job simplified back down to a
+  plain `cargo audit` now that the file is where it'll actually be found,
+  rather than duplicating the ignore list as `--ignore` flags in `ci.yml`.
+
 ### Fixed
-- Updated `rand` to address an unsoundness issue with custom loggers using `rand::rng()`.
+- Updated `rand` to address an unsoundness issue with custom loggers using
+  `rand::rng()`.
+- `ci.yml` restored `fmt`/`clippy -D warnings`/`cargo-audit` as separate
+  jobs and `libgtk-3-dev` in the Linux dependency install step - both had
+  silently dropped out of the workflow file at some point despite
+  ARCHITECTURE.md/README.md continuing to document them as enforced.
+
+### Added
+- Test coverage for the three features that shipped without it in 0.2.0:
+  `print_shaped.rs` (`stitch_print_rgb` coverage, end-to-end PDF-generation
+  smoke tests), `def_builder.rs` (name validation and DEF-line formatting
+  pulled into pure, directly-testable functions), and `fonts.rs`
+  (deterministic bundled-font-data checks plus environment-tolerant
+  `font-kit` enumeration tests).
+- Exercised the parser/eval safety limits (10,000-per-literal,
+  500,000-total) against realistic large patterns: a 90,000-stitch
+  multi-round pattern, a 499,900-stitch pattern right at the boundary, and
+  300 custom-stitch invocations at scale - confirming they don't
+  false-positive-reject legitimate large patterns, not just that they
+  catch runaway ones.
+- `LICENSE`, `SECURITY.md` (private vulnerability reporting via GitHub's
+  advisory feature), a bug-report issue template
+  (`.github/ISSUE_TEMPLATE/bug_report.md`), and `WHAT_TO_TEST.md` (a
+  tester-facing "what to poke at" note, kept separate from the polished
+  README).
+- Package metadata (`description`, `repository`, `readme`, `keywords`,
+  `categories`) in `Cargo.toml`.
+
+### Security
+- `RUSTSEC-2026-0187` (`lopdf` stack overflow via deeply-nested PDF
+  objects, pulled in transitively through `printpdf` 0.7): accepted via a
+  justified entry in `.cargo/audit.toml` rather than fixed. This app only
+  *writes* PDFs from scratch (`print.rs`/`print_shaped.rs`) - nothing
+  calls `lopdf::Document::load`/`load_mem` on file input, so the
+  vulnerable (parsing-only) code path isn't reachable through anything
+  this codebase does. No upgrade path exists that fixes the advisory
+  without an unverified, likely-incompatible `printpdf` rewrite-level
+  migration (see "Changed" above and ARCHITECTURE.md's TODO list).
+
+## [0.2.0]
+
+### Added - GUI
+- Shaped-pattern print/PDF export (`print_shaped.rs`): multi-page tiled
+  PDF showing each stitch's abbreviation, colored by tension state or by
+  an explicit per-stitch `~RRGGBB` color when set, with round-numbered
+  axis labels (round 0 at the bottom, matching real working order rather
+  than colorwork's top-down photo convention) and a tension/color key
+  page. "Export PDF..."/"Print..." now work for both pattern modes.
+- Point-and-click custom-stitch builder (`gui/def_builder.rs`) in the DSL
+  tab - covers the alias form of `DEF:` (name + ordered list of stitches);
+  the raw-geometry form still requires hand-written DSL.
+- Full OS font enumeration for the Text tab (`font-kit`), alongside the
+  existing bundled-family dropdown and manual "browse for a font file"
+  option - three ways to pick a font now, not one.
+
+## [0.1.0]
 
 Initial release. Highlights:
 
@@ -54,18 +124,6 @@ Initial release. Highlights:
   background-color/text-color tension/yarn-color encoding.
 - Debounced gauge/relax controls: a drag gesture triggers one recompile on
   release rather than one per pixel dragged.
-- Shaped-pattern print/PDF export (`print_shaped.rs`): multi-page tiled
-  PDF showing each stitch's abbreviation, colored by tension state or by
-  an explicit per-stitch `~RRGGBB` color when set, with round-numbered
-  axis labels (round 0 at the bottom, matching real working order rather
-  than colorwork's top-down photo convention) and a tension/color key
-  page. "Export PDF..."/"Print..." now work for both pattern modes.
-- Point-and-click custom-stitch builder (`gui/def_builder.rs`) in the DSL
-  tab - covers the alias form of `DEF:` (name + ordered list of stitches);
-  the raw-geometry form still requires hand-written DSL.
-- Full OS font enumeration for the Text tab (`font-kit`), alongside the
-  existing bundled-family dropdown and manual "browse for a font file"
-  option - three ways to pick a font now, not one.
 
 ### Added - round-trip fidelity & diagnostics
 - `StitchNode`/`GridCell` track `def_origin` (which `DEF` produced a
@@ -97,9 +155,15 @@ Initial release. Highlights:
   builds for Windows/macOS/Linux.
 - `ARCHITECTURE.md` for implementation details, separated from the
   now-visitor-focused `README.md`.
-- `LICENSE` file, `SECURITY.md`, and a bug-report issue template
-  (`.github/ISSUE_TEMPLATE/bug_report.md`).
-- Package metadata (`description`, `repository`, `readme`, `keywords`,
-  `categories`) in `Cargo.toml`.
 
-### Known gaps (see ARCHITECTURE.md for the full list)
+### Known gaps (at the time of this release, see ARCHITECTURE.md for the
+current list)
+- No LICENSE file yet (added in 0.2.1).
+- Shaped-pattern PDF/print export doesn't exist yet (added in 0.2.0).
+- No point-and-click `DEF`-authoring UI (partially added in 0.2.0 - alias
+  form only; raw-geometry form still has none).
+- Font selection is a small curated bundle only, no OS font enumeration
+  (enumeration added in 0.2.0).
+- No test coverage for `print_shaped.rs`/`def_builder.rs`/`fonts.rs`
+  (these didn't exist yet at 0.1.0; coverage added alongside them in 0.2.1
+  once they did).
