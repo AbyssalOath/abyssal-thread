@@ -157,7 +157,7 @@ pub fn generate_shaped_pattern_pdf(
             }
             for (local_y, rft) in (rft_start..rft_end).enumerate() {
                 let round_idx = total_rounds - 1 - rft;
-                if round_idx % AXIS_LABEL_INTERVAL == 0 {
+                if round_idx.is_multiple_of(AXIS_LABEL_INTERVAL) {
                     let y = grid_top_y - local_y as f32 * cell_mm;
                     layer.use_text(
                         format!("R{}", round_idx + 1),
