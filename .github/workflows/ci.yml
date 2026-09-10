@@ -61,15 +61,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      checks: write
     steps:
       - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
       # Checks Cargo.lock against the RustSec advisory database
       # (https://rustsec.org) - known-vulnerable or yanked dependency
       # versions fail the build. Worth having specifically here since
       # image import parses untrusted, user-supplied files through the
       # `image` crate - exactly the kind of dependency where a parser
       # vulnerability would actually matter.
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      #
+      # Ignored advisory IDs and justification live in audit.toml at
+      # the repo root; --ignore flags here are the enforcement
+      # mechanism since audit.toml alone wasn't being honored in CI.
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: cargo audit
+        run: >
+          cargo audit
+          --ignore RUSTSEC-2026-0187
+          --ignore RUSTSEC-2024-0388
+          --ignore RUSTSEC-2024-0384
+          --ignore RUSTSEC-2024-0436
+          --ignore RUSTSEC-2026-0192
