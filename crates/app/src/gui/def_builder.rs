@@ -73,8 +73,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut DefBuilderState) -> Option<String> {
     }
 
     ui.horizontal(|ui| {
-        ui.add(egui::DragValue::new(&mut state.new_count).clamp_range(1..=99));
-        egui::ComboBox::from_id_source("def_builder_abbrev")
+        ui.add(egui::DragValue::new(&mut state.new_count).range(1..=99));
+        egui::ComboBox::from_id_salt("def_builder_abbrev")
             .selected_text(KNOWN_ABBREVS[state.new_abbrev_idx])
             .show_ui(ui, |ui| {
                 for (i, abbrev) in KNOWN_ABBREVS.iter().enumerate() {

@@ -270,6 +270,14 @@ convention) and a tension/color key page instead of a hex legend.
   `def_builder.rs`, and the `font-kit` enumeration/resolution functions
   in `fonts.rs` all shipped without `#[cfg(test)]` cases, unlike
   everything else in "Testing" below.
+- **No accessibility (AccessKit) support** - deliberately disabled, not
+  merely absent. `accesskit` pulled in a vulnerable/unmaintained
+  dependency chain on Linux (`quick-xml` et al.) with no corresponding
+  accessibility work actually built on top of it yet, so it was dropped
+  entirely rather than carried as dead weight with a live CVE surface.
+  Revisit if/when real screen-reader/assistive-tech support becomes a
+  goal - re-adding it is straightforward (it's an `eframe` feature flag),
+  the tradeoff was purely "unused now" vs. "security exposure now."
 
 ## Testing
 

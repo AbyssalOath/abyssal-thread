@@ -1,7 +1,14 @@
 [advisories]
 ignore = [
-    "RUSTSEC-2026-0187", # lopdf 0.31 via printpdf 0.7 — fix requires printpdf 0.9 (breaking API, tracked separately) - tracked in issue #1
-    "RUSTSEC-2026-0257", # webbrowser 0.8 via eframe 0.27 — fix requires eframe 0.29+ (breaking egui API, tracked separately) - tracked in issue #2
+    "RUSTSEC-2026-0187", # lopdf via printpdf 0.7 — a parsing vulnerability (unbounded recursion in
+                          # Document::load/load_mem on deeply-nested PDF objects). This app only
+                          # *writes* PDFs (print.rs/print_shaped.rs generate patterns from scratch) -
+                          # nothing calls lopdf::Document::load on file input, so the vulnerable code
+                          # path isn't reachable. No fix currently exists that doesn't require a
+                          # ground-up printpdf API rewrite (0.9+ still pins the vulnerable lopdf
+                          # version anyway; 0.12+ appears to drop the imperative drawing API this
+                          # codebase uses entirely - unverified, not attempted). Revisit if printpdf
+                          # ships a version that both fixes the lopdf pin *and* keeps compatible API.
     "RUSTSEC-2024-0388", # derivative — unmaintained, transitive, low risk
     "RUSTSEC-2024-0384", # instant — unmaintained, transitive, low risk
     "RUSTSEC-2024-0436", # paste — unmaintained, transitive, low risk

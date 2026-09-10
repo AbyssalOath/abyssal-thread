@@ -249,11 +249,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     ui.horizontal(|ui| {
         ui.label("Gauge:");
         changed |= ui
-            .add(egui::DragValue::new(&mut state.gauge_sts_per_4in).clamp_range(1.0..=200.0).speed(0.1))
+            .add(egui::DragValue::new(&mut state.gauge_sts_per_4in).range(1.0..=200.0).speed(0.1))
             .changed();
         ui.label("sts,");
         changed |= ui
-            .add(egui::DragValue::new(&mut state.gauge_rows_per_4in).clamp_range(1.0..=200.0).speed(0.1))
+            .add(egui::DragValue::new(&mut state.gauge_rows_per_4in).range(1.0..=200.0).speed(0.1))
             .changed();
         ui.label("rows, per 4 inches");
     })
@@ -286,7 +286,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
                 changed |= ui
                     .add(
                         egui::DragValue::new(&mut state.desired_width_in)
-                            .clamp_range(0.5..=200.0)
+                            .range(0.5..=200.0)
                             .speed(0.1),
                     )
                     .changed();
@@ -298,7 +298,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
                     .add_enabled(
                         enabled,
                         egui::DragValue::new(&mut state.desired_height_in)
-                            .clamp_range(0.5..=200.0)
+                            .range(0.5..=200.0)
                             .speed(0.1),
                     )
                     .changed();

@@ -312,7 +312,7 @@ pub fn show(
         gauge_changed |= ui
             .add(
                 egui::DragValue::new(&mut state.gauge_sts_per_4in)
-                    .clamp_range(1.0..=200.0)
+                    .range(1.0..=200.0)
                     .speed(0.1),
             )
             .changed();
@@ -320,7 +320,7 @@ pub fn show(
         gauge_changed |= ui
             .add(
                 egui::DragValue::new(&mut state.gauge_rows_per_4in)
-                    .clamp_range(1.0..=200.0)
+                    .range(1.0..=200.0)
                     .speed(0.1),
             )
             .changed();
@@ -356,7 +356,7 @@ pub fn show(
                 inches_changed |= ui
                     .add(
                         egui::DragValue::new(&mut state.desired_width_in)
-                            .clamp_range(0.5..=200.0)
+                            .range(0.5..=200.0)
                             .speed(0.1),
                     )
                     .changed();
@@ -366,7 +366,7 @@ pub fn show(
                 inches_changed |= ui
                     .add(
                         egui::DragValue::new(&mut state.desired_height_in)
-                            .clamp_range(0.5..=200.0)
+                            .range(0.5..=200.0)
                             .speed(0.1),
                     )
                     .changed();

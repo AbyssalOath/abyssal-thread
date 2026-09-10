@@ -248,7 +248,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
     ui.horizontal(|ui| {
         ui.label("Font:");
         let current_name = FONT_FAMILIES[state.selected_family].name;
-        egui::ComboBox::from_id_source("text_import_font_family")
+        egui::ComboBox::from_id_salt("text_import_font_family")
             .selected_text(current_name)
             .show_ui(ui, |ui| {
                 for (i, family) in FONT_FAMILIES.iter().enumerate() {
@@ -286,7 +286,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
     ui.horizontal(|ui| {
         ui.label("Or an installed system font:");
         let current = state.selected_system_font.clone().unwrap_or_else(|| "(none)".to_string());
-        egui::ComboBox::from_id_source("text_import_system_font")
+        egui::ComboBox::from_id_salt("text_import_system_font")
             .selected_text(current)
             .show_ui(ui, |ui| {
                 for name in state.system_font_names.clone() {
@@ -331,7 +331,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
     ui.horizontal(|ui| {
         ui.label("Render detail (px):");
         changed |= ui
-            .add(egui::DragValue::new(&mut state.render_font_size).clamp_range(20.0..=800.0).speed(2.0))
+            .add(egui::DragValue::new(&mut state.render_font_size).range(20.0..=800.0).speed(2.0))
             .on_hover_text("Higher = more detail available when resizing to the stitch grid below. Doesn't change the final stitch count.")
             .changed();
     });
@@ -363,7 +363,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
         size_changed |= ui
             .add(
                 egui::DragValue::new(&mut state.gauge_sts_per_4in)
-                    .clamp_range(1.0..=200.0)
+                    .range(1.0..=200.0)
                     .speed(0.1),
             )
             .changed();
@@ -371,7 +371,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
         size_changed |= ui
             .add(
                 egui::DragValue::new(&mut state.gauge_rows_per_4in)
-                    .clamp_range(1.0..=200.0)
+                    .range(1.0..=200.0)
                     .speed(0.1),
             )
             .changed();
@@ -404,7 +404,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
                 size_changed |= ui
                     .add(
                         egui::DragValue::new(&mut state.desired_width_in)
-                            .clamp_range(0.5..=200.0)
+                            .range(0.5..=200.0)
                             .speed(0.1),
                     )
                     .changed();
@@ -416,7 +416,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
                     .add_enabled(
                         enabled,
                         egui::DragValue::new(&mut state.desired_height_in)
-                            .clamp_range(0.5..=200.0)
+                            .range(0.5..=200.0)
                             .speed(0.1),
                     )
                     .changed();

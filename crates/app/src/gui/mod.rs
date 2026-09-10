@@ -89,7 +89,7 @@ pub fn run(initial_input: Option<PathBuf>) -> anyhow::Result<()> {
     eframe::run_native(
         "abyssal-thread",
         native_options,
-        Box::new(|_cc| Box::new(app)),
+        Box::new(|_cc| Ok(Box::new(app))),
     )
     .map_err(|e| anyhow::anyhow!("gui error: {e}"))
 }
@@ -695,7 +695,7 @@ impl eframe::App for GoblinApp {
                 ui.label("Print cell size:");
                 ui.add(
                     egui::DragValue::new(&mut self.print_cell_size_in)
-                        .clamp_range(0.1..=1.0)
+                        .range(0.1..=1.0)
                         .speed(0.01)
                         .suffix(" in"),
                 );
@@ -705,7 +705,7 @@ impl eframe::App for GoblinApp {
                 ui.label("Margin:");
                 ui.add(
                     egui::DragValue::new(&mut self.print_margin_in)
-                        .clamp_range(0.1..=2.0)
+                        .range(0.1..=2.0)
                         .speed(0.01)
                         .suffix(" in"),
                 );
@@ -861,19 +861,19 @@ impl eframe::App for GoblinApp {
                             ui.label("Gauge (sts/rows per 4in):");
                             let sts_resp = ui.add(
                                 egui::DragValue::new(&mut self.shaped_gauge_sts_per_4in)
-                                    .clamp_range(1.0..=200.0)
+                                    .range(1.0..=200.0)
                                     .speed(0.1),
                             );
                             let rows_resp = ui.add(
                                 egui::DragValue::new(&mut self.shaped_gauge_rows_per_4in)
-                                    .clamp_range(1.0..=200.0)
+                                    .range(1.0..=200.0)
                                     .speed(0.1),
                             );
                             ui.separator();
                             ui.label("Relax iterations:");
                             let relax_resp = ui.add(
                                 egui::DragValue::new(&mut self.shaped_relax_iterations)
-                                    .clamp_range(0..=500),
+                                    .range(0..=500),
                             );
                             // Recompiling means a full layout_ring -> relax
                             // -> analyze_tension pass - cheap for a quick
