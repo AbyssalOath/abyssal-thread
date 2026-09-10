@@ -1,16 +1,19 @@
 [advisories]
 ignore = [
-    "RUSTSEC-2026-0187", # lopdf via printpdf 0.7 — a parsing vulnerability (unbounded recursion in
+    "RUSTSEC-2026-0187", # lopdf via printpdf 0.7 - a parsing vulnerability (unbounded recursion in
                           # Document::load/load_mem on deeply-nested PDF objects). This app only
                           # *writes* PDFs (print.rs/print_shaped.rs generate patterns from scratch) -
                           # nothing calls lopdf::Document::load on file input, so the vulnerable code
-                          # path isn't reachable. No fix currently exists that doesn't require a
-                          # ground-up printpdf API rewrite (0.9+ still pins the vulnerable lopdf
-                          # version anyway; 0.12+ appears to drop the imperative drawing API this
-                          # codebase uses entirely - unverified, not attempted). Revisit if printpdf
-                          # ships a version that both fixes the lopdf pin *and* keeps compatible API.
-    "RUSTSEC-2024-0388", # derivative — unmaintained, transitive, low risk
-    "RUSTSEC-2024-0384", # instant — unmaintained, transitive, low risk
-    "RUSTSEC-2024-0436", # paste — unmaintained, transitive, low risk
-    "RUSTSEC-2026-0192", # ttf-parser — unmaintained, transitive, low risk
+                          # path isn't reachable. Reviewed again 2026-09-10: lopdf 0.42.0+ does fix
+                          # this advisory, and printpdf 0.12.8 (current latest) pulls lopdf ^0.44 -
+                          # so a fix now exists upstream, but 0.7 -> 0.12 spans a real rewrite (adds
+                          # html/svg2pdf/azul-layout-based rendering) and it's still unverified
+                          # whether the low-level imperative "get a page, draw lines/text on it" API
+                          # this codebase depends on (print.rs/print_shaped.rs) survived that rewrite
+                          # in a compatible form. Revisit as a dedicated migration-plus-testing pass,
+                          # not a drop-in version bump - see ARCHITECTURE.md's TODO list.
+    "RUSTSEC-2024-0388", # derivative - unmaintained, transitive, low risk
+    "RUSTSEC-2024-0384", # instant - unmaintained, transitive, low risk
+    "RUSTSEC-2024-0436", # paste - unmaintained, transitive, low risk
+    "RUSTSEC-2026-0192", # ttf-parser - unmaintained, transitive, low risk
 ]

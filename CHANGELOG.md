@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.5] - 2026-09-10
+
+### Added
+- Raw-geometry mode for the DEF builder (`gui/def_builder.rs`): the DSL
+  tab's point-and-click custom-stitch builder now covers both `DEF:`
+  forms via a mode toggle, not just the alias form. Rather than a
+  node/edge graph editor, it's a form - stitches are placed in order
+  behind a running cursor-position list, and marking one relative/closing
+  exposes an optional primary-parent override plus a list of extra
+  closing-edge references (self/N-before/N-after) picked from that list
+  instead of typed by hand as `%-N`. The assembled body is live-validated
+  against the real `raw_def::parse_raw_def` parser and
+  `looks_like_raw_body` classifier before "Insert" is enabled.
+
+### Changed
+- `.cargo/audit.toml`'s accepted-advisory list re-reviewed against the
+  current RustSec advisory database - see "Security" below for what
+  changed and what didn't.
+
+### Security
+- `RUSTSEC-2026-0187` (`lopdf` via `printpdf` 0.7) re-reviewed: `lopdf`
+  0.42.0+ does fix the advisory, and `printpdf` 0.12.8 (current latest)
+  does pull a fixed `lopdf` (`^0.44`) - a real upstream fix path exists
+  now, unlike at 0.2.1. Still accepted rather than upgraded to this
+  release, though - `printpdf` 0.7 -> 0.12 spans a real API rewrite
+  (added `html`/`svg`/`azul-layout`-based rendering alongside the
+  original drawing calls this codebase uses), and whether
+  `print.rs`/`print_shaped.rs`'s specific low-level calls still work in a
+  compatible form is unverified and needs a dedicated migration-plus-
+  testing pass rather than a version bump. See ARCHITECTURE.md's TODO
+  list.
+- The other four accepted advisories (`derivative`, `instant`, `paste`,
+  `ttf-parser` - all unmaintained, transitive, low-risk) re-checked with
+  no change: still no patched version to move to.
+
 ## [0.2.1] - 2026-09-08
 
 ### Changed

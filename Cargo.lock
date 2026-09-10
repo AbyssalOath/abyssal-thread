@@ -20,7 +20,7 @@ checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
 
 [[package]]
 name = "abyssal-thread"
-version = "0.2.1"
+version = "0.2.5"
 dependencies = [
  "ab_glyph",
  "abyssal-thread-core",
@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-core"
-version = "0.2.1"
+version = "0.2.5"
 dependencies = [
  "petgraph",
  "serde",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-export"
-version = "0.2.1"
+version = "0.2.5"
 dependencies = [
  "abyssal-thread-core",
  "petgraph",
@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-imageimport"
-version = "0.2.1"
+version = "0.2.5"
 dependencies = [
  "abyssal-thread-core",
  "anyhow",
@@ -68,7 +68,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-lang"
-version = "0.2.1"
+version = "0.2.5"
 dependencies = [
  "abyssal-thread-core",
  "petgraph",
@@ -77,7 +77,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-layout"
-version = "0.2.1"
+version = "0.2.5"
 dependencies = [
  "abyssal-thread-core",
  "petgraph",

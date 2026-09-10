@@ -79,8 +79,8 @@ abyssal-thread/
 │                           dropdown + bold/italic, per-line centering),
 │                           fonts.rs (bundled FontFamily registry +
 │                           OS font enumeration via font-kit),
-│                           def_builder.rs (point-and-click DEF alias
-│                           builder), recent_colors.rs (shared
+│                           def_builder.rs (point-and-click DEF builder,
+│                           alias + raw-geometry forms), recent_colors.rs (shared
 │                           color-picker history)
 ├── .github/
 │   ├── workflows/           ci.yml (check/test/build + fmt/clippy/audit as
@@ -247,10 +247,21 @@ emitting the *wrong* stitch count, worse than an honest, loudly-flagged
 flatten. See `StitchNode::def_origin`'s doc comment for the full reasoning.
 
 **Working - DEF authoring UI:** the DSL tab has a point-and-click builder
-(`gui/def_builder.rs`) for the *alias* form of `DEF:` - name it, add
-stitches from a dropdown in order, insert. Deliberately doesn't cover the
-raw-geometry form (`%`/`%-N` relative attachment) - building that
-visually would need a node/edge graph editor, not a list of dropdowns.
+(`gui/def_builder.rs`) covering both `DEF:` forms via a mode toggle:
+
+- *Alias* - name it, add stitches from a dropdown in order, insert.
+- *Raw geometry* (`%`/`%-N`/`%+N`/`@N` relative attachment, see
+  `raw_def.rs`) - rather than a node/edge graph editor, this is a form:
+  stitches are placed in order behind a running "cursor position" list
+  (so `3ch` shows as occupying positions `0-2`, matching `raw_def.rs`'s
+  own counting rule), and marking a stitch "relative/closing" exposes an
+  optional primary-parent override plus a list of extra closing-edge
+  references (self/N-before/N-after) built by picking a kind and a
+  position rather than typing `%-N` by hand. The assembled body is
+  live-validated against the real `raw_def::parse_raw_def` parser and
+  `looks_like_raw_body` classifier before "Insert" is enabled, so nothing
+  that wouldn't parse back in - or would silently misclassify as an alias
+  for lacking a `%` anywhere - can be inserted.
 
 **Working - crash recovery:** the live pattern is autosaved to a fixed
 temp-directory path on every successful compile. On the next launch, if a
@@ -288,20 +299,30 @@ argument: this app only *writes* PDFs from scratch, nothing calls
 parsing bug the advisory describes has no code path to trigger through.
 `cargo audit` (both locally and in CI's `audit` job) reads this file
 automatically - no separate `--ignore` flags needed, and no advisory is
-silently allowed without a reason recorded next to it.
+silently allowed without a reason recorded next to it. All five accepted
+entries were re-checked against the current RustSec advisory database on
+2026-09-10: the four unmaintained-crate entries (`derivative`, `instant`,
+`paste`, `ttf-parser`) still have no patched version to move to, and
+`RUSTSEC-2026-0187`'s status changed (see the `printpdf` TODO entry below)
+but still has no drop-in fix - so the accepted list is unchanged, just
+re-dated.
 
 **Stubbed / TODO:**
 
 - **`printpdf` is pinned at 0.7, not upgraded.** `printpdf` 0.9.x still
   depends on the same vulnerable `lopdf` version the advisory above is
   about (upgrading to it would mean a real API migration for zero
-  security benefit), and `printpdf` 0.12.x (current latest) appears to be
-  a ground-up rewrite centered on `azul-layout`-based HTML-to-PDF
-  rendering rather than the low-level imperative "get a page, draw lines
-  and text on it" API `print.rs`/`print_shaped.rs` depend on - unverified
-  whether that API still exists there at all. Revisit if `printpdf` ever
-  ships a version that both pulls in a fixed `lopdf` *and* keeps this
-  codebase's drawing API compatible.
+  security benefit). Reviewed again 2026-09-10: `lopdf` 0.42.0+ does fix
+  `RUSTSEC-2026-0187`, and `printpdf` 0.12.8 (current latest) does pull a
+  fixed `lopdf` (`^0.44`) - so a fix exists upstream now, unlike when this
+  entry was first written. But `printpdf` 0.12.x has also grown an
+  `html`/`svg`/`azul-layout`-based rendering path alongside its original
+  drawing API, and it's still unverified whether the specific low-level
+  imperative calls `print.rs`/`print_shaped.rs` use (`PdfDocument::empty`,
+  per-layer `add_line`/`use_text`, etc.) survived four major-version jumps
+  in a compatible form - that needs an actual migration attempt with
+  compilation and visual/byte-level PDF verification (see "Testing"
+  below), not a blind version bump. Revisit as a dedicated pass.
 - **No accessibility (AccessKit) support** - deliberately disabled, not
   merely absent. `accesskit` pulled in a vulnerable/unmaintained
   dependency chain on Linux (`quick-xml` et al.) with no corresponding
@@ -327,9 +348,10 @@ farthest-point-seeding fix and the degenerate-image guard), print
 visually-verified output, plus a "every cell covered exactly once, no
 gaps" invariant check), print_shaped (`stitch_print_rgb` coverage plus
 end-to-end smoke tests that generate real PDF files and check for
-non-trivial output), def_builder (name validation and DEF-line formatting
-extracted into pure functions, plus a round-trip test through the real
-parser), and fonts (deterministic bundled-`FontFamily` data checks - valid
+non-trivial output), def_builder (name validation and both alias/raw-geometry
+DEF-line formatting extracted into pure functions, plus round-trip tests
+through the real `raw_def::parse_raw_def` parser and the full DSL parser
+for each form), and fonts (deterministic bundled-`FontFamily` data checks - valid
 TTF/OTF headers, correct `bytes_for` variant selection, unique names -
 plus environment-tolerant tests for the `font-kit` system enumeration
 functions that don't assume anything about what's actually installed on
@@ -344,15 +366,14 @@ as four separate jobs on every push and PR.
 
 ## Suggested next milestones
 
-1. If `printpdf` ever ships a version with both a fixed `lopdf` and a
-   compatible drawing API, migrate - see the `Stubbed / TODO` entry above.
-2. A `DEF`-authoring UI for the raw-geometry form (`%`/`%-N`), so custom
-   stitches don't require hand-writing DSL for that half of the grammar
-   either - the alias form already has one (`def_builder.rs`).
-3. More bundled font families (`gui/fonts.rs`) if the current curated set
+1. Attempt the `printpdf` 0.7 -> 0.12 migration now that a fixed `lopdf`
+   is actually reachable through it - see the `Stubbed / TODO` entry
+   above. This is a real, compile-and-verify migration (new drawing API,
+   possibly a different crate feature set), not a version-number edit.
+2. More bundled font families (`gui/fonts.rs`) if the current curated set
    feels limiting - system-font enumeration via `font-kit` already covers
    "use whatever's installed" for anyone who wants that instead.
-4. Periodically review `.cargo/audit.toml`'s accepted-advisory list - each
+3. Periodically review `.cargo/audit.toml`'s accepted-advisory list - each
    entry there is a decision made under specific conditions (no available
    fix, or a specific reachability argument); worth re-checking those
    conditions still hold rather than letting the list grow stale.
