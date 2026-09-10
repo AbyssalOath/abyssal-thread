@@ -71,14 +71,12 @@ jobs:
       # `image` crate - exactly the kind of dependency where a parser
       # vulnerability would actually matter.
       #
-      # Ignored advisory IDs and justification live in audit.toml at
-      # the repo root; --ignore flags here are the enforcement
-      # mechanism since audit.toml alone wasn't being honored in CI.
+      # Ignored advisories + justification live in .cargo/audit.toml,
+      # which cargo-audit reads automatically.
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: cargo audit
-        run: >
-          cargo audit
+        run: cargo audit
           --ignore RUSTSEC-2026-0187
           --ignore RUSTSEC-2024-0388
           --ignore RUSTSEC-2024-0384
