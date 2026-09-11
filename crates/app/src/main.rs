@@ -13,8 +13,11 @@ mod print_shaped;
     about = "A Rust crochet CAD system: DSL -> stitch graph -> 3D model -> chart"
 )]
 struct Cli {
+    // Optional so double-clicking the built binary (no args at all, e.g. on
+    // Windows) falls through to the Gui branch below instead of clap
+    // printing usage and exiting instantly - see main()'s `unwrap_or`.
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -60,7 +63,7 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    match cli.command {
+    match cli.command.unwrap_or(Commands::Gui { input: None }) {
         Commands::Build {
             input,
             svg,
