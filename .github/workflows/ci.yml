@@ -2,59 +2,47 @@ name: CI
 
 on:
   push:
+    branches: [master]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  test:
-    name: check, test, build
-    runs-on: ubuntu-latest
-
+  check:
+    name: check / test / clippy / fmt (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
 
       - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libfontconfig1-dev libfreetype6-dev
 
-      - name: Check
-        run: cargo check --workspace
-
-      - name: Test
-        run: cargo test --workspace
-
-      - name: Build
-        run: cargo build --workspace --release
-
-  fmt:
-    name: cargo fmt --check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
-      - name: cargo fmt --all -- --check
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
         run: cargo fmt --all -- --check
 
-  clippy:
-    name: cargo clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libfontconfig1-dev libfreetype6-dev
-      - name: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: cargo build (all targets)
+        run: cargo build --workspace --all-targets
 
   audit:
     name: cargo audit
@@ -62,7 +50,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       # Checks Cargo.lock against the RustSec advisory database
       # (https://rustsec.org) - known-vulnerable or yanked dependency

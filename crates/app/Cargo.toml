@@ -13,6 +13,21 @@ license-file.workspace = true
 name = "abyssal-thread"
 path = "src/main.rs"
 
+# Release-installer bundling (cargo-packager, run from the CI release
+# workflow). cargo-packager chdir's into this manifest's directory
+# before packaging, so icon paths are relative to here, not the
+# workspace root.
+[package.metadata.packager]
+product-name = "Abyssal Thread"
+identifier = "com.abyssal.thread"
+icons = [
+    "icons/32x32.png",
+    "icons/128x128.png",
+    "icons/128x128@2x.png",
+    "icons/icon.icns",
+    "icons/icon.ico",
+]
+
 [dependencies]
 abyssal-thread-core = { path = "../core" }
 abyssal-thread-lang = { path = "../lang" }
