@@ -74,8 +74,10 @@ pub fn compute_tiling(
     }
 }
 
-/// Generates the full tiled pattern PDF (grid pages + one legend page) and
-/// writes it to `out_path`.
+/// Generates the full tiled pattern PDF (grid pages + one legend page, plus
+/// paginated written-instructions pages when `instructions` is `Some` - the
+/// filet-mode case, via `abyssal_thread_export::write_filet_instructions`)
+/// and writes it to `out_path`.
 pub fn generate_pattern_pdf(
     grid: &ColorGrid,
     cell_mm: f32,
@@ -83,6 +85,7 @@ pub fn generate_pattern_pdf(
     out_path: &Path,
     page: PageSize,
     margin_mm: f32,
+    instructions: Option<&str>,
 ) -> anyhow::Result<()> {
     let plan = compute_tiling(grid.width, grid.height, cell_mm, page, margin_mm);
 
@@ -267,8 +270,59 @@ pub fn generate_pattern_pdf(
         );
     }
 
+    if let Some(text) = instructions {
+        add_instructions_pages(&doc, &font, &font_bold, pattern_name, text, page, margin_mm);
+    }
+
     doc.save(&mut BufWriter::new(File::create(out_path)?))?;
     Ok(())
+}
+
+const INSTRUCTIONS_FONT_SIZE: f32 = 9.0;
+const INSTRUCTIONS_LINE_HEIGHT_MM: f32 = 5.5;
+const INSTRUCTIONS_HEADING_SPACE_MM: f32 = 15.0;
+
+/// Adds as many pages as needed to lay out `text` (one PDF text line per
+/// input line - callers are expected to have already wrapped/formatted it,
+/// as `write_filet_instructions` does with one line per pattern row) below
+/// a heading, continuing onto further pages once a page's line budget
+/// runs out.
+fn add_instructions_pages(
+    doc: &PdfDocumentReference,
+    font: &IndirectFontRef,
+    font_bold: &IndirectFontRef,
+    pattern_name: &str,
+    text: &str,
+    page: PageSize,
+    margin_mm: f32,
+) {
+    let lines: Vec<&str> = text.lines().collect();
+    let usable_h = page.height_mm - 2.0 * margin_mm - INSTRUCTIONS_HEADING_SPACE_MM;
+    let lines_per_page = ((usable_h / INSTRUCTIONS_LINE_HEIGHT_MM).floor() as usize).max(1);
+
+    for (page_idx, chunk) in lines.chunks(lines_per_page).enumerate() {
+        let (p, l) = doc.add_page(Mm(page.width_mm), Mm(page.height_mm), "Layer 1");
+        let layer = doc.get_page(p).get_layer(l);
+        let heading = if page_idx == 0 {
+            format!("{pattern_name} - written instructions")
+        } else {
+            format!("{pattern_name} - written instructions (cont.)")
+        };
+        layer.use_text(
+            heading,
+            14.0,
+            Mm(margin_mm),
+            Mm(page.height_mm - margin_mm),
+            font_bold,
+        );
+        for (i, line) in chunk.iter().enumerate() {
+            let y = page.height_mm
+                - margin_mm
+                - INSTRUCTIONS_HEADING_SPACE_MM
+                - (i as f32) * INSTRUCTIONS_LINE_HEIGHT_MM;
+            layer.use_text(*line, INSTRUCTIONS_FONT_SIZE, Mm(margin_mm), Mm(y), font);
+        }
+    }
 }
 
 /// Writes the PDF to a temp file and opens it with the OS's default PDF
@@ -281,10 +335,19 @@ pub fn print_via_system_default(
     pattern_name: &str,
     page: PageSize,
     margin_mm: f32,
+    instructions: Option<&str>,
 ) -> anyhow::Result<()> {
     let mut path = std::env::temp_dir();
     path.push(format!("{}_print.pdf", sanitize_filename(pattern_name)));
-    generate_pattern_pdf(grid, cell_mm, pattern_name, &path, page, margin_mm)?;
+    generate_pattern_pdf(
+        grid,
+        cell_mm,
+        pattern_name,
+        &path,
+        page,
+        margin_mm,
+        instructions,
+    )?;
     opener::open(&path)?;
     Ok(())
 }
@@ -364,5 +427,119 @@ mod tests {
             "merci_pour_le_venin_"
         );
         assert_eq!(sanitize_filename(""), "pattern");
+    }
+
+    fn small_test_grid() -> ColorGrid {
+        let mut grid = ColorGrid::new(4, 3, [255, 255, 255]);
+        grid.set(0, 0, [0, 0, 0]);
+        grid.set(1, 0, [0, 0, 0]);
+        grid
+    }
+
+    #[test]
+    fn generates_a_real_nonempty_pdf_file_with_instructions() {
+        // Same reasoning as print_shaped.rs's equivalent test: exercises
+        // `generate_pattern_pdf` end to end with a real `instructions`
+        // value (the filet written-instructions path), not just
+        // `add_instructions_pages`'s pure line-count math.
+        let grid = small_test_grid();
+        let dir = std::env::temp_dir();
+        let out_path = dir.join(format!(
+            "abyssal_thread_test_filet_{}.pdf",
+            std::process::id()
+        ));
+
+        let result = generate_pattern_pdf(
+            &grid,
+            6.0,
+            "test filet pattern",
+            &out_path,
+            PageSize::US_LETTER,
+            12.7,
+            Some("Foundation chain: 16\n\nRow 1: 2 B, 2 SP\nRow 2: 4 SP\nRow 3: 4 SP\n"),
+        );
+        assert!(result.is_ok(), "generate_pattern_pdf failed: {result:?}");
+
+        let metadata = std::fs::metadata(&out_path).expect("output PDF should exist");
+        assert!(
+            metadata.len() > 500,
+            "output PDF is suspiciously small: {} bytes",
+            metadata.len()
+        );
+
+        let _ = std::fs::remove_file(&out_path);
+    }
+
+    #[test]
+    fn omitting_instructions_still_generates_a_valid_pdf() {
+        // The plain colorwork path (no filet instructions) must keep
+        // working unchanged now that `instructions` is a parameter.
+        let grid = small_test_grid();
+        let dir = std::env::temp_dir();
+        let out_path = dir.join(format!(
+            "abyssal_thread_test_nocolorwork_{}.pdf",
+            std::process::id()
+        ));
+        let result = generate_pattern_pdf(
+            &grid,
+            6.0,
+            "no instructions",
+            &out_path,
+            PageSize::US_LETTER,
+            12.7,
+            None,
+        );
+        assert!(result.is_ok(), "generate_pattern_pdf failed: {result:?}");
+        let _ = std::fs::remove_file(&out_path);
+    }
+
+    #[test]
+    fn long_instructions_spill_onto_a_second_page() {
+        let grid = small_test_grid();
+        let dir = std::env::temp_dir();
+        let out_path = dir.join(format!(
+            "abyssal_thread_test_long_instructions_{}.pdf",
+            std::process::id()
+        ));
+        // Comfortably more rows than fit on one US Letter page at the
+        // default line height/margin - forces `add_instructions_pages`
+        // to actually paginate rather than exercising only its
+        // single-page path.
+        let long_text: String = (1..=200).map(|n| format!("Row {n}: 4 SP\n")).collect();
+
+        let with_instructions_len = {
+            generate_pattern_pdf(
+                &grid,
+                6.0,
+                "long instructions",
+                &out_path,
+                PageSize::US_LETTER,
+                12.7,
+                Some(&long_text),
+            )
+            .expect("generate_pattern_pdf failed");
+            std::fs::metadata(&out_path).unwrap().len()
+        };
+        generate_pattern_pdf(
+            &grid,
+            6.0,
+            "long instructions",
+            &out_path,
+            PageSize::US_LETTER,
+            12.7,
+            None,
+        )
+        .expect("generate_pattern_pdf failed");
+        let without_instructions_len = std::fs::metadata(&out_path).unwrap().len();
+
+        // 200 lines of text across multiple extra pages is a real,
+        // substantial size difference - not just noise from one extra
+        // near-empty page.
+        assert!(
+            with_instructions_len > without_instructions_len + 1000,
+            "expected instructions pages to add meaningfully to file size: {with_instructions_len} vs {without_instructions_len}"
+        );
+
+        let _ = std::fs::remove_file(&out_path);
     }
 }

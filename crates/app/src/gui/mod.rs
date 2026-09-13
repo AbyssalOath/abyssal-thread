@@ -374,6 +374,9 @@ impl GoblinApp {
             payload.source,
             payload.colors,
             payload.filter,
+            payload.filet,
+            payload.fill_threshold,
+            payload.invert_threshold,
         ));
         self.recompile_from_dsl();
         self.view_mode = ViewMode::Grid;
@@ -449,19 +452,39 @@ impl GoblinApp {
     }
 
     /// Colorwork-only: writes the hex/name legend for the currently loaded
-    /// colorwork pattern. Exposed in the top toolbar (not just the Image
-    /// Import tab) so it's still reachable after sending a grid to the
-    /// paint editor and making manual touch-ups there.
+    /// colorwork pattern - or, for a filet mesh chart, the foundation chain
+    /// and written block/space row instructions instead, since a filet
+    /// chart has no yarn-color legend to speak of. Exposed in the top
+    /// toolbar (not just the Image Import tab) so it's still reachable
+    /// after sending a grid to the paint editor and making manual
+    /// touch-ups there.
     fn export_legend(&mut self) {
         let Some(state) = &self.colorwork else {
             self.status = "legend export is only available for colorwork patterns".to_string();
             return;
         };
-        let legend = abyssal_thread_export::export_color_grid_legend(&state.grid);
-        match std::fs::write(&self.export_legend_path, legend) {
+        let text = match state.filet {
+            Some(colors) => {
+                abyssal_thread_export::write_filet_instructions(&state.grid, colors.block)
+            }
+            None => abyssal_thread_export::export_color_grid_legend(&state.grid),
+        };
+        match std::fs::write(&self.export_legend_path, text) {
             Ok(()) => self.status = format!("wrote legend to {}", self.export_legend_path),
             Err(e) => self.status = format!("couldn't write {}: {e}", self.export_legend_path),
         }
+    }
+
+    /// The written-instructions text to embed in a filet chart's PDF, or
+    /// `None` for a non-filet colorwork pattern (which gets the existing
+    /// color-legend-only PDF).
+    fn filet_pdf_instructions(&self) -> Option<String> {
+        let state = self.colorwork.as_ref()?;
+        let colors = state.filet?;
+        Some(abyssal_thread_export::write_filet_instructions(
+            &state.grid,
+            colors.block,
+        ))
     }
 
     /// Colorwork-only, same reasoning as `export_legend`: writes the
@@ -472,6 +495,7 @@ impl GoblinApp {
             .pattern_name
             .clone()
             .unwrap_or_else(|| "pattern".to_string());
+        let instructions = self.filet_pdf_instructions();
         let result = if let Some(state) = &self.colorwork {
             crate::print::generate_pattern_pdf(
                 &state.grid,
@@ -480,6 +504,7 @@ impl GoblinApp {
                 Path::new(&self.export_pdf_path),
                 self.print_page_size,
                 self.print_margin_in * 25.4,
+                instructions.as_deref(),
             )
         } else if let Some(g) = &self.graph {
             crate::print_shaped::generate_shaped_pattern_pdf(
@@ -511,6 +536,7 @@ impl GoblinApp {
             .pattern_name
             .clone()
             .unwrap_or_else(|| "pattern".to_string());
+        let instructions = self.filet_pdf_instructions();
         let result = if let Some(state) = &self.colorwork {
             crate::print::print_via_system_default(
                 &state.grid,
@@ -518,6 +544,7 @@ impl GoblinApp {
                 &name,
                 self.print_page_size,
                 self.print_margin_in * 25.4,
+                instructions.as_deref(),
             )
         } else if let Some(g) = &self.graph {
             crate::print_shaped::print_shaped_via_system_default(

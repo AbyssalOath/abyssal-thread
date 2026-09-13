@@ -148,6 +148,43 @@ pub fn quantize(img: &RgbImage, k: usize) -> ColorGrid {
     }
 }
 
+/// Reduces `img` to exactly two colors by literal luminance threshold,
+/// rather than `quantize`'s k-means clustering - this is the "fill
+/// threshold" a filet-crochet chart needs: a pixel becomes `block_color`
+/// once its luminance crosses `cutoff`, so dragging the slider visibly
+/// grows/shrinks the filled region instead of re-clustering into whatever
+/// colors happen to dominate. `invert` swaps which side of the cutoff is
+/// "filled," for source images with a light motif on a dark background.
+pub fn threshold(
+    img: &RgbImage,
+    cutoff: u8,
+    invert: bool,
+    block_color: [u8; 3],
+    space_color: [u8; 3],
+) -> ColorGrid {
+    let (width, height) = (img.width() as usize, img.height() as usize);
+    let cells = img
+        .pixels()
+        .map(|p| {
+            // ITU-R BT.601 luma weights - the standard "perceived
+            // brightness" approximation, so e.g. pure blue doesn't read as
+            // brighter than pure red at the same threshold value.
+            let luma = 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32;
+            let filled = luma <= cutoff as f32;
+            if filled != invert {
+                block_color
+            } else {
+                space_color
+            }
+        })
+        .collect();
+    ColorGrid {
+        width,
+        height,
+        cells,
+    }
+}
+
 fn dist2(a: [f32; 3], b: [f32; 3]) -> f32 {
     let dx = a[0] - b[0];
     let dy = a[1] - b[1];
@@ -192,6 +229,27 @@ mod tests {
 
     fn solid_image(w: u32, h: u32, color: [u8; 3]) -> DynamicImage {
         DynamicImage::ImageRgb8(RgbImage::from_pixel(w, h, image::Rgb(color)))
+    }
+
+    #[test]
+    fn threshold_splits_dark_and_light_halves_into_block_and_space() {
+        let mut img = RgbImage::from_pixel(4, 1, image::Rgb([250, 250, 250]));
+        img.put_pixel(0, 0, image::Rgb([10, 10, 10]));
+        img.put_pixel(1, 0, image::Rgb([10, 10, 10]));
+        let grid = threshold(&img, 128, false, [0, 0, 0], [255, 255, 255]);
+        assert_eq!(grid.get(0, 0), [0, 0, 0]);
+        assert_eq!(grid.get(1, 0), [0, 0, 0]);
+        assert_eq!(grid.get(2, 0), [255, 255, 255]);
+        assert_eq!(grid.get(3, 0), [255, 255, 255]);
+    }
+
+    #[test]
+    fn threshold_invert_swaps_which_side_is_filled() {
+        let img = RgbImage::from_pixel(2, 1, image::Rgb([10, 10, 10]));
+        let normal = threshold(&img, 128, false, [0, 0, 0], [255, 255, 255]);
+        let inverted = threshold(&img, 128, true, [0, 0, 0], [255, 255, 255]);
+        assert_eq!(normal.get(0, 0), [0, 0, 0]);
+        assert_eq!(inverted.get(0, 0), [255, 255, 255]);
     }
 
     #[test]

@@ -13,9 +13,13 @@
 //! independent of whatever's loaded in the Grid/3D/DSL tabs.
 
 use abyssal_thread_core::ColorGrid;
-use abyssal_thread_imageimport::{quantize, resize_exact, resize_preserving_aspect, ResizeFilter};
+use abyssal_thread_imageimport::{
+    quantize, resize_exact, resize_preserving_aspect, threshold, ResizeFilter,
+};
 use eframe::egui::{self, Color32, ColorImage, TextureHandle, TextureOptions};
 use image::DynamicImage;
+
+use super::colorwork_grid::FiletColors;
 
 /// Whether the size controls are driven by direct stitch counts or by a
 /// desired finished size (converted through the gauge below). Switching
@@ -36,6 +40,16 @@ pub struct ImageImportState {
     colors: usize,
     filter: ResizeFilter,
     size_mode: SizeMode,
+    /// Filet crochet mode: reduces to exactly two colors (block/space) by
+    /// luminance threshold instead of the arbitrary-palette k-means
+    /// `quantize` path - see the module doc on `crate::gui::colorwork_grid`
+    /// for why this stays a `ColorGrid`-only feature rather than flowing
+    /// through the same stitch-graph pipeline solid colorwork does.
+    filet_mode: bool,
+    fill_threshold: u8,
+    invert_threshold: bool,
+    block_color: [u8; 3],
+    space_color: [u8; 3],
     /// Gauge as printed on a yarn label / measured from a swatch: stitches
     /// and rows per 4 inches (not per inch directly) - stitches and rows
     /// almost always need separate values since crochet stitches aren't
@@ -63,6 +77,11 @@ impl Default for ImageImportState {
             colors: 4,
             filter: ResizeFilter::Nearest,
             size_mode: SizeMode::Stitches,
+            filet_mode: false,
+            fill_threshold: 128,
+            invert_threshold: false,
+            block_color: [0, 0, 0],
+            space_color: [255, 255, 255],
             // Sensible starting point, not a substitute for your actual
             // swatch - typical worsted-weight single crochet runs somewhere
             // near this, but gauge varies by yarn, hook, and crocheter.
@@ -113,8 +132,25 @@ impl ImageImportState {
         // number always matches what was actually produced.
         self.height = resized.height();
         self.width = resized.width();
-        self.grid = Some(quantize(&resized, self.colors));
+        self.grid = Some(if self.filet_mode {
+            threshold(
+                &resized,
+                self.fill_threshold,
+                self.invert_threshold,
+                self.block_color,
+                self.space_color,
+            )
+        } else {
+            quantize(&resized, self.colors)
+        });
         self.preview_texture = None; // rebuilt lazily in `show` (needs `ctx`)
+    }
+
+    fn filet_colors(&self) -> Option<FiletColors> {
+        self.filet_mode.then_some(FiletColors {
+            block: self.block_color,
+            space: self.space_color,
+        })
     }
 
     fn sts_per_in(&self) -> f32 {
@@ -201,6 +237,10 @@ pub struct GridImportPayload {
     pub source: DynamicImage,
     pub colors: usize,
     pub filter: ResizeFilter,
+    /// `Some` when this came from Filet mode - see `FiletColors`.
+    pub filet: Option<FiletColors>,
+    pub fill_threshold: u8,
+    pub invert_threshold: bool,
 }
 
 /// Returns `Some(payload)` when the user clicked "Send to Grid editor" this
@@ -316,24 +356,60 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     if let Some(grid) = &state.grid {
         let est_w_in = grid.width as f32 / state.sts_per_in();
         let est_h_in = grid.height as f32 / state.rows_per_in();
+        let unit = if state.filet_mode {
+            "Block count"
+        } else {
+            "Stitch count"
+        };
         ui.label(format!(
-            "Stitch count: {} ({} x {}) \u{2192} approx finished size at this gauge: {:.1} in x {:.1} in",
+            "{unit}: {} ({} x {}) \u{2192} approx finished size at this gauge: {:.1} in x {:.1} in",
             grid.width * grid.height,
             grid.width,
             grid.height,
             est_w_in,
             est_h_in,
         ));
+        if state.filet_mode {
+            ui.label(format!(
+                "Foundation chain: {}",
+                abyssal_thread_export::filet_starting_chain(grid.width)
+            ));
+        }
     }
 
     ui.separator();
-    ui.heading("Colors");
-    ui.horizontal(|ui| {
-        ui.label("Number of colors:");
-        changed |= ui
-            .add(egui::Slider::new(&mut state.colors, 1..=16))
-            .changed();
-    });
+    changed |= ui
+        .checkbox(&mut state.filet_mode, "Filet crochet mode")
+        .on_hover_text("Reduces the image to two colors (block/space) by brightness threshold instead of a full palette, and enables filet-specific chain count and written block/space instructions below.")
+        .changed();
+
+    if state.filet_mode {
+        ui.heading("Fill");
+        ui.horizontal(|ui| {
+            ui.label("Fill threshold:");
+            changed |= ui
+                .add(egui::Slider::new(&mut state.fill_threshold, 0..=255))
+                .on_hover_text("Adjust until the motif reads clearly - pixels darker than this become blocks (or lighter, with Invert on).")
+                .changed();
+        });
+        ui.horizontal(|ui| {
+            changed |= ui.checkbox(&mut state.invert_threshold, "Invert").changed();
+            ui.label("Block color:");
+            changed |=
+                egui::color_picker::color_edit_button_srgb(ui, &mut state.block_color).changed();
+            ui.label("Space color:");
+            changed |=
+                egui::color_picker::color_edit_button_srgb(ui, &mut state.space_color).changed();
+        });
+    } else {
+        ui.heading("Colors");
+        ui.horizontal(|ui| {
+            ui.label("Number of colors:");
+            changed |= ui
+                .add(egui::Slider::new(&mut state.colors, 1..=16))
+                .changed();
+        });
+    }
     ui.horizontal(|ui| {
         ui.label("Resize style:");
         changed |= ui
@@ -415,6 +491,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
                     source: source.clone(),
                     colors: state.colors,
                     filter: state.filter,
+                    filet: state.filet_colors(),
+                    fill_threshold: state.fill_threshold,
+                    invert_threshold: state.invert_threshold,
                 });
             }
         }

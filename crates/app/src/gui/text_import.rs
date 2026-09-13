@@ -18,11 +18,14 @@
 //! whole block as one unit) - so "MERCI POUR LE" / "VENIN" centers each
 //! line on its own, matching how the reference image was laid out.
 
+use crate::gui::colorwork_grid::FiletColors;
 use crate::gui::fonts::FONT_FAMILIES;
 use crate::gui::image_import::GridImportPayload;
 use ab_glyph::{FontArc, PxScale};
 use abyssal_thread_core::ColorGrid;
-use abyssal_thread_imageimport::{quantize, resize_exact, resize_preserving_aspect, ResizeFilter};
+use abyssal_thread_imageimport::{
+    quantize, resize_exact, resize_preserving_aspect, threshold, ResizeFilter,
+};
 use eframe::egui::{self, Color32, ColorImage, TextureHandle, TextureOptions};
 use image::{DynamicImage, Rgba, RgbaImage};
 use imageproc::drawing::{draw_text_mut, text_size};
@@ -54,6 +57,13 @@ pub struct TextImportState {
     lock_aspect: bool,
     colors: usize,
     filter: ResizeFilter,
+    /// Filet crochet mode - see the doc comment on `image_import.rs`'s copy
+    /// of these same three fields. Reuses `fg_color`/`bg_color` (already
+    /// the text/background colors used to render the source image) as the
+    /// block/space colors, rather than adding a second pair of pickers.
+    filet_mode: bool,
+    fill_threshold: u8,
+    invert_threshold: bool,
     size_mode: SizeMode,
     gauge_sts_per_4in: f32,
     gauge_rows_per_4in: f32,
@@ -84,6 +94,9 @@ impl Default for TextImportState {
             lock_aspect: true,
             colors: 2,
             filter: ResizeFilter::Nearest,
+            filet_mode: false,
+            fill_threshold: 128,
+            invert_threshold: false,
             size_mode: SizeMode::Stitches,
             gauge_sts_per_4in: 16.0,
             gauge_rows_per_4in: 16.0,
@@ -195,8 +208,25 @@ impl TextImportState {
         };
         self.height = resized.height();
         self.width = resized.width();
-        self.grid = Some(quantize(&resized, self.colors));
+        self.grid = Some(if self.filet_mode {
+            threshold(
+                &resized,
+                self.fill_threshold,
+                self.invert_threshold,
+                self.fg_color,
+                self.bg_color,
+            )
+        } else {
+            quantize(&resized, self.colors)
+        });
         self.preview_texture = None;
+    }
+
+    fn filet_colors(&self) -> Option<FiletColors> {
+        self.filet_mode.then_some(FiletColors {
+            block: self.fg_color,
+            space: self.bg_color,
+        })
     }
 
     fn sts_per_in(&self) -> f32 {
@@ -430,12 +460,27 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
         .checkbox(&mut state.lock_aspect, "Lock aspect ratio")
         .changed();
 
-    ui.horizontal(|ui| {
-        ui.label("Number of colors:");
-        size_changed |= ui
-            .add(egui::Slider::new(&mut state.colors, 1..=16))
-            .changed();
-    });
+    size_changed |= ui
+        .checkbox(&mut state.filet_mode, "Filet crochet mode")
+        .on_hover_text("Reduces to two colors (block/space, using the text/background colors above) by brightness threshold, and enables filet-specific chain count and written block/space instructions.")
+        .changed();
+    if state.filet_mode {
+        ui.horizontal(|ui| {
+            ui.label("Fill threshold:");
+            size_changed |= ui
+                .add(egui::Slider::new(&mut state.fill_threshold, 0..=255))
+                .on_hover_text("Adjust until the motif reads clearly.")
+                .changed();
+            size_changed |= ui.checkbox(&mut state.invert_threshold, "Invert").changed();
+        });
+    } else {
+        ui.horizontal(|ui| {
+            ui.label("Number of colors:");
+            size_changed |= ui
+                .add(egui::Slider::new(&mut state.colors, 1..=16))
+                .changed();
+        });
+    }
     ui.horizontal(|ui| {
         ui.label("Resize style:");
         size_changed |= ui
@@ -453,14 +498,25 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
     if let Some(grid) = &state.grid {
         let est_w_in = grid.width as f32 / state.sts_per_in();
         let est_h_in = grid.height as f32 / state.rows_per_in();
+        let unit = if state.filet_mode {
+            "Block count"
+        } else {
+            "Stitch count"
+        };
         ui.label(format!(
-            "Stitch count: {} ({} x {}) \u{2192} approx finished size at this gauge: {:.1} in x {:.1} in",
+            "{unit}: {} ({} x {}) \u{2192} approx finished size at this gauge: {:.1} in x {:.1} in",
             grid.width * grid.height,
             grid.width,
             grid.height,
             est_w_in,
             est_h_in,
         ));
+        if state.filet_mode {
+            ui.label(format!(
+                "Foundation chain: {}",
+                abyssal_thread_export::filet_starting_chain(grid.width)
+            ));
+        }
     }
 
     ui.separator();
@@ -484,6 +540,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
                 source: rendered.clone(),
                 colors: state.colors,
                 filter: state.filter,
+                filet: state.filet_colors(),
+                fill_threshold: state.fill_threshold,
+                invert_threshold: state.invert_threshold,
             });
         }
     }

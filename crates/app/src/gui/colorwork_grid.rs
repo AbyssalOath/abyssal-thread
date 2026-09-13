@@ -41,6 +41,24 @@ enum PaintMode {
     Bucket,
 }
 
+/// Marks a `ColorworkGridState` as a filet-crochet mesh chart rather than
+/// an arbitrary-palette colorwork/graphgan panel: exactly two colors
+/// (block/space), with mesh-specific math (foundation chain, written
+/// block/space row instructions - see `abyssal_thread_export::filet`)
+/// available instead of free palette editing. A filet grid still IS a
+/// `ColorGrid` and still goes through the same DSL/3D-view bridge every
+/// other colorwork pattern does (`abyssal_thread_lang::color_grid_to_dsl` /
+/// `StitchGraph::from_color_grid`) - that bridge models one single crochet
+/// per cell, which is a simplified stand-in for the actual dc+chain mesh
+/// structure, not a literal one. The paint grid, PDF chart, and written
+/// instructions below are the accurate representation; treat the DSL/3D
+/// tabs as a rough preview for a filet pattern, not a source of truth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FiletColors {
+    pub block: [u8; 3],
+    pub space: [u8; 3],
+}
+
 pub struct ColorworkGridState {
     pub grid: ColorGrid,
     pub palette: Vec<[u8; 3]>,
@@ -74,6 +92,10 @@ pub struct ColorworkGridState {
     source_image: Option<DynamicImage>,
     colors: usize,
     filter: ResizeFilter,
+    /// `Some` when this is a filet mesh chart - see `FiletColors`.
+    pub filet: Option<FiletColors>,
+    fill_threshold: u8,
+    invert_threshold: bool,
 }
 
 impl ColorworkGridState {
@@ -100,6 +122,9 @@ impl ColorworkGridState {
             source_image: None,
             colors: 4,
             filter: ResizeFilter::Nearest,
+            filet: None,
+            fill_threshold: 128,
+            invert_threshold: false,
         };
         state.sync_pending_from_grid();
         state.sync_inches_from_stitches();
@@ -110,17 +135,25 @@ impl ColorworkGridState {
     /// color count/resize filter Image Import used) so `resize_canvas` can
     /// re-render from source instead of cropping/padding. Used by
     /// `GoblinApp::load_color_grid` when a grid arrives via "Send to Grid
-    /// editor" from the Image Import tab.
+    /// editor" from the Image Import or Text Import tab. `filet` carries
+    /// through Filet mode (and the threshold settings that produced this
+    /// grid, so `resize_canvas` re-thresholds instead of re-quantizing).
     pub fn from_image_import(
         grid: ColorGrid,
         source: DynamicImage,
         colors: usize,
         filter: ResizeFilter,
+        filet: Option<FiletColors>,
+        fill_threshold: u8,
+        invert_threshold: bool,
     ) -> Self {
         let mut state = Self::from_grid(grid);
         state.source_image = Some(source);
         state.colors = colors;
         state.filter = filter;
+        state.filet = filet;
+        state.fill_threshold = fill_threshold;
+        state.invert_threshold = invert_threshold;
         state
     }
 
@@ -247,7 +280,16 @@ impl ColorworkGridState {
                 new_height as u32,
                 self.filter,
             );
-            self.grid = abyssal_thread_imageimport::quantize(&resized, self.colors);
+            self.grid = match self.filet {
+                Some(colors) => abyssal_thread_imageimport::threshold(
+                    &resized,
+                    self.fill_threshold,
+                    self.invert_threshold,
+                    colors.block,
+                    colors.space,
+                ),
+                None => abyssal_thread_imageimport::quantize(&resized, self.colors),
+            };
             // Refresh the palette to match what's actually achievable at
             // the new size/color count - safe to do here (unlike on every
             // paint stroke, which was the earlier "selected color resets"
@@ -274,6 +316,41 @@ impl ColorworkGridState {
         }
         self.grid = new_grid;
         self.texture_dirty = true;
+    }
+}
+
+/// Foundation chain count + written block/space row instructions for a
+/// filet mesh chart, with a read-only (but selectable/copyable) preview
+/// and a save-to-file button - the same "Export ...txt" pattern the
+/// colorwork legend export already uses elsewhere in this app.
+fn show_filet_panel(ui: &mut egui::Ui, colors: FiletColors, grid: &ColorGrid) {
+    ui.separator();
+    ui.heading("Filet pattern");
+    let chain = abyssal_thread_export::filet_starting_chain(grid.width);
+    ui.label(format!(
+        "Foundation chain: {chain} (a ch-3 at the start of row 1 counts as its first dc)"
+    ));
+    let mut instructions = abyssal_thread_export::write_filet_instructions(grid, colors.block);
+    ui.label("Written instructions:");
+    egui::ScrollArea::vertical()
+        .id_salt("filet_instructions_scroll")
+        .max_height(160.0)
+        .show(ui, |ui| {
+            ui.add(
+                egui::TextEdit::multiline(&mut instructions)
+                    .desired_width(f32::INFINITY)
+                    .font(egui::TextStyle::Monospace)
+                    .interactive(false),
+            );
+        });
+    if ui.button("Export written instructions...").clicked() {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Text", &["txt"])
+            .set_file_name("filet_instructions.txt")
+            .save_file()
+        {
+            let _ = std::fs::write(&path, &instructions);
+        }
     }
 }
 
@@ -387,12 +464,22 @@ pub fn show(
 
     let mut colors_changed = false;
     if state.source_image.is_some() {
-        ui.horizontal(|ui| {
-            ui.label("Colors:");
-            colors_changed |= ui
-                .add(egui::Slider::new(&mut state.colors, 1..=16))
-                .changed();
-        });
+        if state.filet.is_some() {
+            ui.horizontal(|ui| {
+                ui.label("Fill threshold:");
+                colors_changed |= ui
+                    .add(egui::Slider::new(&mut state.fill_threshold, 0..=255))
+                    .changed();
+                colors_changed |= ui.checkbox(&mut state.invert_threshold, "Invert").changed();
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.label("Colors:");
+                colors_changed |= ui
+                    .add(egui::Slider::new(&mut state.colors, 1..=16))
+                    .changed();
+            });
+        }
         if colors_changed {
             let (w, h) = (state.pending_width as usize, state.pending_height as usize);
             state.resize_canvas(w, h);
@@ -402,14 +489,23 @@ pub fn show(
 
     let est_w_in = state.grid.width as f32 / state.sts_per_in();
     let est_h_in = state.grid.height as f32 / state.rows_per_in();
+    let unit = if state.filet.is_some() {
+        "Block count"
+    } else {
+        "Stitch count"
+    };
     ui.label(format!(
-        "Stitch count: {} ({} x {}) \u{2192} approx finished size at this gauge: {:.1} in x {:.1} in",
+        "{unit}: {} ({} x {}) \u{2192} approx finished size at this gauge: {:.1} in x {:.1} in",
         state.grid.width * state.grid.height,
         state.grid.width,
         state.grid.height,
         est_w_in,
         est_h_in,
     ));
+
+    if let Some(colors) = state.filet {
+        show_filet_panel(ui, colors, &state.grid);
+    }
 
     ui.separator();
     ui.horizontal(|ui| {
@@ -429,8 +525,10 @@ pub fn show(
             if response.clicked() {
                 state.selected = i;
             }
-            // Must always keep at least one color to paint with.
-            if response.secondary_clicked() && state.palette.len() > 1 {
+            // Must always keep at least one color to paint with, and a
+            // filet chart's palette is locked to exactly its two colors -
+            // block/space semantics assume there are no others.
+            if state.filet.is_none() && response.secondary_clicked() && state.palette.len() > 1 {
                 to_remove = Some(i);
             }
         }
@@ -443,25 +541,31 @@ pub fn show(
             }
         }
 
-        ui.separator();
-        egui::color_picker::color_edit_button_srgb(ui, &mut state.new_color);
-        if ui.button("+ Add color").clicked() {
-            state.palette.push(state.new_color);
-            state.selected = state.palette.len() - 1;
-            recent.record(state.new_color);
+        if state.filet.is_none() {
+            ui.separator();
+            egui::color_picker::color_edit_button_srgb(ui, &mut state.new_color);
+            if ui.button("+ Add color").clicked() {
+                state.palette.push(state.new_color);
+                state.selected = state.palette.len() - 1;
+                recent.record(state.new_color);
+            }
         }
     });
-    ui.small("Left-click a swatch to select it, right-click to remove it from the palette.");
-    if let Some(picked) = recent.show(ui) {
-        // Quick-add/-select rather than blindly pushing a duplicate -
-        // reusing a color someone already picked here or in the shaped
-        // grid editor should feel like picking it, not cluttering the
-        // palette with two swatches of the same color.
-        match state.palette.iter().position(|&c| c == picked) {
-            Some(i) => state.selected = i,
-            None => {
-                state.palette.push(picked);
-                state.selected = state.palette.len() - 1;
+    if state.filet.is_some() {
+        ui.small("Select Block or Space, then click (or click-and-drag) a square to set it.");
+    } else {
+        ui.small("Left-click a swatch to select it, right-click to remove it from the palette.");
+        if let Some(picked) = recent.show(ui) {
+            // Quick-add/-select rather than blindly pushing a duplicate -
+            // reusing a color someone already picked here or in the shaped
+            // grid editor should feel like picking it, not cluttering the
+            // palette with two swatches of the same color.
+            match state.palette.iter().position(|&c| c == picked) {
+                Some(i) => state.selected = i,
+                None => {
+                    state.palette.push(picked);
+                    state.selected = state.palette.len() - 1;
+                }
             }
         }
     }
