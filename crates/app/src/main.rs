@@ -1,3 +1,10 @@
+// Prevents Windows from allocating a console window for this process at
+// all (that's what made the packaged .exe/.msi pop up a blank terminal
+// behind the GUI on launch). CLI usage (`abyssal-thread.exe build ...`)
+// still works from a terminal - see attach_parent_console() below, which
+// reconnects to the caller's console before any output is printed.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::fs;
@@ -6,6 +13,39 @@ use std::path::PathBuf;
 mod gui;
 mod print;
 mod print_shaped;
+
+/// Re-attaches this GUI-subsystem process's stdout/stderr to the console
+/// of whatever launched it (a terminal), so CLI subcommands still print
+/// visibly there. Never called when launched with no args (double-click,
+/// desktop shortcut) - those runs stay fully headless.
+#[cfg(windows)]
+fn attach_parent_console() {
+    use std::fs::OpenOptions;
+    use std::os::windows::io::IntoRawHandle;
+    use windows_sys::Win32::System::Console::{
+        AttachConsole, SetStdHandle, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+    };
+
+    // SAFETY: FFI call with no preconditions; failure (no parent console
+    // to attach to) is handled by simply returning.
+    let attached = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) != 0 };
+    if !attached {
+        return;
+    }
+
+    // GetStdHandle still returns this process's original (invalid) stdio
+    // handles after AttachConsole - std::io::stdout()/stderr() need to be
+    // repointed at the console buffer we just attached to.
+    for std_handle in [STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        if let Ok(file) = OpenOptions::new().read(true).write(true).open("CONOUT$") {
+            // SAFETY: `file`'s raw handle is a valid, open HANDLE that we
+            // hand ownership of to the console via SetStdHandle.
+            unsafe {
+                SetStdHandle(std_handle, file.into_raw_handle() as _);
+            }
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -62,6 +102,13 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
+    // Any argument (a subcommand, `--help`, etc.) means this was launched
+    // from a terminal expecting CLI behavior, not double-clicked.
+    #[cfg(windows)]
+    if std::env::args().len() > 1 {
+        attach_parent_console();
+    }
+
     let cli = Cli::parse();
     match cli.command.unwrap_or(Commands::Gui { input: None }) {
         Commands::Build {

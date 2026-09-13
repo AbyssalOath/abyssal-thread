@@ -68,3 +68,9 @@ ab_glyph = "0.2"
 # Swap the custom wireframe viewport in gui/viewport.rs for a real
 # shaded/textured mesh renderer later:
 #   three-d = "0.17"     # or wgpu directly, for the 3D stitch model viewport
+
+# Windows-only: re-attach to a parent console for `build ...` CLI usage,
+# since main.rs's `windows_subsystem = "windows"` otherwise leaves the
+# packaged exe with no console at all (see attach_parent_console()).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
