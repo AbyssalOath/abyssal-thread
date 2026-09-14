@@ -165,6 +165,22 @@ pub struct GoblinApp {
     /// (recover or discard) for this session, or if the CLI was given a
     /// specific file to open instead (see `run`).
     pending_recovery: Option<String>,
+    /// In-flight "is a newer version available" check, polled non-
+    /// blockingly (`try_recv`) once per frame in `update` - see
+    /// `crate::update` for why this is a background thread + channel
+    /// rather than a direct blocking call. `update_check_is_manual`
+    /// distinguishes the silent startup check (errors are swallowed - no
+    /// internet shouldn't nag the user) from an explicit "Check for
+    /// Updates" click (errors get a status message).
+    update_check_rx:
+        Option<std::sync::mpsc::Receiver<anyhow::Result<Option<crate::update::ReleaseInfo>>>>,
+    update_check_is_manual: bool,
+    update_available: Option<crate::update::ReleaseInfo>,
+    show_update_dialog: bool,
+    /// In-flight installer download, started from the update dialog's
+    /// "Download & Install" button - see `crate::update::download_async`.
+    update_download_rx: Option<std::sync::mpsc::Receiver<anyhow::Result<std::path::PathBuf>>>,
+    update_downloading: bool,
 }
 
 impl Default for GoblinApp {
@@ -220,8 +236,20 @@ impl Default for GoblinApp {
             compile_warnings: Vec::new(),
             recent_colors: recent_colors::RecentColors::default(),
             pending_recovery: None,
+            update_check_rx: None,
+            update_check_is_manual: false,
+            update_available: None,
+            show_update_dialog: false,
+            update_download_rx: None,
+            update_downloading: false,
         };
         app.recompile_from_dsl();
+        // Silent startup check - see `poll_update_check`'s doc comment for
+        // why failures here (most commonly: no internet) never surface to
+        // the user.
+        app.update_check_rx = Some(crate::update::check_async(
+            env!("CARGO_PKG_VERSION").to_string(),
+        ));
         // Checked after the fresh blank-canvas state is already fully
         // built and compiled, so declining recovery (or the file being
         // unreadable/empty) just leaves that normal blank start in place -
@@ -575,6 +603,86 @@ impl GoblinApp {
             Err(e) => self.status = format!("couldn't write {}: {e}", self.export_obj_path),
         }
     }
+
+    /// Starts a background update check (see `crate::update::check_async`),
+    /// replacing any still-running one - the "Check for Updates" button is
+    /// disabled while `update_check_rx` is `Some` (see its `show` call
+    /// site), so in practice this only ever restarts the silent startup
+    /// check, which is harmless.
+    fn start_update_check(&mut self, manual: bool) {
+        self.update_check_is_manual = manual;
+        self.update_check_rx = Some(crate::update::check_async(
+            env!("CARGO_PKG_VERSION").to_string(),
+        ));
+    }
+
+    /// Polls the in-flight update check, if any, without blocking. Called
+    /// once per frame from `update`. A failed *automatic* check (most
+    /// commonly: no internet) is swallowed entirely - the whole point of
+    /// running it silently at startup is that it must never nag someone
+    /// who's offline. A failed *manual* check (the toolbar button) gets a
+    /// status message, since the person explicitly asked and deserves to
+    /// know why nothing happened.
+    fn poll_update_check(&mut self) {
+        let Some(rx) = &self.update_check_rx else {
+            return;
+        };
+        let Ok(result) = rx.try_recv() else { return };
+        self.update_check_rx = None;
+        match result {
+            Ok(Some(info)) => {
+                self.status = format!(
+                    "Version {} is available (you have {}).",
+                    info.version,
+                    env!("CARGO_PKG_VERSION")
+                );
+                self.update_available = Some(info);
+                self.show_update_dialog = true;
+            }
+            Ok(None) => {
+                if self.update_check_is_manual {
+                    self.status = "You're up to date.".to_string();
+                }
+            }
+            Err(e) => {
+                if self.update_check_is_manual {
+                    self.status = format!("couldn't check for updates: {e}");
+                }
+            }
+        }
+    }
+
+    /// Polls the in-flight installer download, if any. On success, hands
+    /// the downloaded file to the OS's default handler for it (runs the
+    /// installer on Windows, mounts the disk image on macOS, opens
+    /// whatever's registered for `.AppImage`/`.deb` on Linux) - the exact
+    /// same thing double-clicking a manually downloaded file would do.
+    fn poll_update_download(&mut self) {
+        let Some(rx) = &self.update_download_rx else {
+            return;
+        };
+        let Ok(result) = rx.try_recv() else { return };
+        self.update_download_rx = None;
+        self.update_downloading = false;
+        match result {
+            Ok(path) => match opener::open(&path) {
+                Ok(()) => {
+                    self.status = format!(
+                        "downloaded update to {} - continue in the installer that just opened",
+                        path.display()
+                    );
+                    self.show_update_dialog = false;
+                }
+                Err(e) => {
+                    self.status = format!(
+                        "downloaded update to {} but couldn't open it: {e}",
+                        path.display()
+                    );
+                }
+            },
+            Err(e) => self.status = format!("couldn't download update: {e}"),
+        }
+    }
 }
 
 impl eframe::App for GoblinApp {
@@ -616,6 +724,9 @@ impl eframe::App for GoblinApp {
             // indistinguishable to the rest of the app otherwise.
             return;
         }
+
+        self.poll_update_check();
+        self.poll_update_download();
 
         let undo_pressed =
             ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
@@ -743,8 +854,64 @@ impl eframe::App for GoblinApp {
                 {
                     self.print_chart();
                 }
+
+                ui.separator();
+                let checking = self.update_check_rx.is_some();
+                if ui
+                    .add_enabled(!checking, egui::Button::new(if checking { "Checking..." } else { "Check for Updates" }))
+                    .clicked()
+                {
+                    self.start_update_check(true);
+                }
             });
         });
+
+        if self.show_update_dialog {
+            if let Some(info) = self.update_available.clone() {
+                let mut open = true;
+                let asset = crate::update::pick_asset(&info.assets).cloned();
+                egui::Window::new("Update available")
+                    .collapsible(false)
+                    .resizable(false)
+                    .open(&mut open)
+                    .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                    .show(ctx, |ui| {
+                        ui.label(format!(
+                            "Version {} is available - you have {}.",
+                            info.version,
+                            env!("CARGO_PKG_VERSION")
+                        ));
+                        if asset.is_none() {
+                            ui.small("No installer found for this platform in the release assets - use \"Open release page\" instead.");
+                        }
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Open release page").clicked() {
+                                let _ = opener::open(&info.html_url);
+                                self.show_update_dialog = false;
+                            }
+                            let download_enabled = asset.is_some() && !self.update_downloading;
+                            let label = if self.update_downloading { "Downloading..." } else { "Download & Install" };
+                            if ui
+                                .add_enabled(download_enabled, egui::Button::new(label))
+                                .clicked()
+                            {
+                                if let Some(asset) = asset.clone() {
+                                    self.update_downloading = true;
+                                    self.update_download_rx = Some(crate::update::download_async(asset));
+                                    self.status = "downloading update...".to_string();
+                                }
+                            }
+                            if ui.button("Later").clicked() {
+                                self.show_update_dialog = false;
+                            }
+                        });
+                    });
+                if !open {
+                    self.show_update_dialog = false;
+                }
+            }
+        }
 
         egui::TopBottomPanel::top("view_tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {

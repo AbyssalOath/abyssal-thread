@@ -13,6 +13,7 @@ use std::path::PathBuf;
 mod gui;
 mod print;
 mod print_shaped;
+mod update;
 
 /// Re-attaches this GUI-subsystem process's stdout/stderr to the console
 /// of whatever launched it (a terminal), so CLI subcommands still print
