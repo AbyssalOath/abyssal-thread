@@ -81,3 +81,10 @@ semver = "1"
 # packaged exe with no console at all (see attach_parent_console()).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
+
+# Embeds icons/icon.ico into the compiled .exe's own PE resources (see
+# build.rs) - without this, Explorer/the taskbar/"Apps & Features" have no
+# icon resource to read for the binary itself and fall back to a generic
+# one, independently of the runtime window icon eframe sets.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

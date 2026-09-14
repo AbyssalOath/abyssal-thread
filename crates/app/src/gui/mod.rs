@@ -74,6 +74,28 @@ enum ViewMode {
     TextImport,
 }
 
+/// Decodes the bundled app icon into the RGBA form `eframe`'s window/
+/// taskbar icon needs. `include_bytes!` (not a runtime file read) because
+/// the packaged installers don't ship an `icons/` folder next to the
+/// installed executable - this needs to work from wherever the exe ends
+/// up, not just from a source checkout.
+///
+/// Without this, `eframe` falls back to its own default icon - a white
+/// "e" (for egui/eframe) on a black background - in the title bar,
+/// taskbar, and Alt-Tab switcher.
+fn load_app_icon() -> egui::IconData {
+    let bytes = include_bytes!("../../icons/128x128.png");
+    let image = image::load_from_memory(bytes)
+        .expect("bundled app icon should be a valid image")
+        .into_rgba8();
+    let (width, height) = image.dimensions();
+    egui::IconData {
+        rgba: image.into_raw(),
+        width,
+        height,
+    }
+}
+
 pub fn run(initial_input: Option<PathBuf>) -> anyhow::Result<()> {
     let mut app = GoblinApp::default();
     if let Some(path) = initial_input {
@@ -85,7 +107,10 @@ pub fn run(initial_input: Option<PathBuf>) -> anyhow::Result<()> {
         app.load_from_path();
     }
 
-    let native_options = eframe::NativeOptions::default();
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_icon(load_app_icon()),
+        ..Default::default()
+    };
     eframe::run_native(
         "abyssal-thread",
         native_options,
