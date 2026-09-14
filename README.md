@@ -37,6 +37,44 @@ all from the same pattern.
 
 ## Install & run
 
+### Download a prebuilt release (recommended)
+
+Grab the installer for your OS from the
+[latest release](../../releases/latest) page (built automatically by
+`.github/workflows/release.yml` for every tagged version). Each release
+uploads these files - version numbers below match the current release
+(`0.2.8`) as an example, but the same naming pattern applies to every
+release:
+
+- **Windows** - `Abyssal-Thread_0.2.8_x64-setup.exe` (or the `.msi` if you
+  prefer an MSI install). Run it and click through the install wizard.
+- **macOS** - `Abyssal-Thread_0.2.8_aarch64.dmg` for Apple Silicon
+  (M-series), or `Abyssal-Thread_0.2.8_x64.dmg` for an Intel Mac. Open the
+  `.dmg` and drag Abyssal Thread into Applications.
+- **Linux** - either `Abyssal-Thread_0.2.8_amd64.AppImage` (no
+  installation: `chmod +x` it and run it directly; needs `libfuse2` on
+  distros that don't ship FUSE 2 by default) or
+  `Abyssal-Thread_0.2.8_amd64.deb` (Debian/Ubuntu: `sudo apt install
+  ./Abyssal-Thread_0.2.8_amd64.deb`, or open it with your distro's package
+  installer).
+
+**These installers aren't code-signed**, so your OS will warn you the
+first time you run one - this is expected, not a sign anything's wrong:
+
+- **Windows**: SmartScreen will say "Windows protected your PC." Click
+  "More info," then "Run anyway."
+- **macOS**: Gatekeeper will refuse to open it from a normal double-click.
+  Right-click (or Control-click) the app and choose "Open" instead, then
+  confirm in the dialog that appears - only needed the first time.
+- **Linux**: no OS-level warning; just make sure the AppImage/deb is
+  executable/installed as described above.
+
+Once installed, the app checks for new releases on startup and offers to
+open the release page or download-and-run the new installer directly -
+see "Check for Updates" in the toolbar to check manually at any time.
+
+### Build from source
+
 Requires a recent [Rust toolchain](https://rustup.rs/).
 
 On Linux, you'll also need a few system libraries before `cargo build`
@@ -59,13 +97,6 @@ cargo run -p abyssal-thread -- build examples/sphere.cgp --svg sphere.svg --obj 
 
 which compiles a pattern, writes a chart (SVG) and a 3D armature (OBJ,
 importable into Blender), and prints a tension report.
-
-Prebuilt binaries for Windows/macOS/Linux are attached to
-[releases](../../releases) (built by `.github/workflows/release.yml`).
-These aren't code-signed yet, so your OS will likely warn you on first
-launch - on macOS, right-click the app and choose "Open" instead of
-double-clicking; on Windows, click "More info" then "Run anyway" on the
-SmartScreen prompt. This is expected, not a sign anything's wrong.
 
 ## Learn more
 
