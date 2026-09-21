@@ -125,4 +125,4 @@ Issues and PRs welcome. `cargo test --workspace` should pass and
 
 If you find Abyssal Thread helpful, please consider supporting its development:
 
-[Donate via Ko-fi](https://ko-fi.com/lordsodomiser)
+[Donate via Ko-fi](https://ko-fi.com/abyssaloath)
