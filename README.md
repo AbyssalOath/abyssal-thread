@@ -120,3 +120,9 @@ See the [LICENSE](LICENSE) file for license information.
 Issues and PRs welcome. `cargo test --workspace` should pass and
 `cargo fmt --all -- --check` / `cargo clippy --workspace --all-targets --
 -D warnings` should be clean before opening a PR - CI enforces all three.
+
+## Support the Project
+
+If you find Abyssal Thread helpful, please consider supporting its development:
+
+[Donate via Ko-fi](https://ko-fi.com/lordsodomiser)
