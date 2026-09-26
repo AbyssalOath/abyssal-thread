@@ -40,6 +40,17 @@ grid, no tension), `None` ⇒ shaped mode (stitch-abbreviation grid,
 one place that decides which branch to take, based on
 `pattern.color_grid.is_some()` - same test as `lang::eval::eval` uses.
 
+**Chart crafts are a third `Option`:** `self.xstitch:
+Option<crossstitch_grid::CrossStitchState>` (named for the first chart
+craft, but it holds a chart for any of them). `Some` ⇒ a chart craft is
+loaded, and `self.craft` says which. Crucially, **`dsl_source` still holds
+the pattern as text** - the chart's `.cgp` text instead of crochet DSL - so
+undo/redo, autosave, crash recovery and the Source tab all work unchanged
+for every craft. `recompile_from_dsl` checks
+`crossstitch::is_chart_source(&self.dsl_source)` first and, if so, hands
+off to `recompile_chart` (parse the chart, update `self.xstitch` in place,
+set `self.craft`) instead of the crochet path below.
+
 ### The recompile path in detail (`recompile_from_dsl`, `mod.rs`)
 
 ```
@@ -83,6 +94,64 @@ undo/redo, since undo/redo is in-memory only and dies with the process. On
 the fresh blank-canvas default, `pending_recovery` gets set, and `update()`
 renders a modal recovery prompt *before anything else*, returning early so
 nothing underneath can be touched until the user picks Recover/Discard.
+
+## `new_pattern.rs` - the craft picker
+
+A plain `egui::Window` with one card per `core::Craft` (label, blurb, and
+Blank / From picture / From text / Open file... buttons), shown on launch
+(unless an autosave is being recovered or a file was passed on the command
+line) and from the toolbar's **New...**. It returns `(Craft, Start)` and
+`GoblinApp::start_new_pattern` does the rest: a blank chart for a chart
+craft (`new_blank_chart`, sized and colored from the craft's profile) or a
+blank crochet canvas, then switches to the Image or Text tab for the
+picture/text starts. The picker doesn't set a mode - it just creates a
+pattern, and the craft comes from that pattern from then on.
+
+## `crossstitch_grid.rs` - the chart editor and Materials tab
+
+The editor for every chart craft. It follows `colorwork_grid.rs`'s
+performance rule exactly (full cells are one GPU texture, one interactive
+region), and adds overlays painted each frame **only for the visible part
+of the scroll area**: symbols (once cells are big enough to read), part
+stitches, board lines, backstitch and knots. The visible-range math
+(`col0..col1`, `row0..row1` from the clip rect) is what keeps a large chart
+cheap - worth copying if you ever draw lots of small shapes over a big
+grid.
+
+Cells can be **non-square** (knitting: `cw` x `ch`, from
+`Fabric::cell_aspect`), so every conversion between chart coordinates and
+screen pixels goes through `to_screen` / `p = (local.x / cw, local.y /
+ch)` rather than a single `cell` size - if you add drawing code here, use
+those, not `cell_px` directly.
+
+**Tool logic is separated from the UI**: `apply_tool(state, &PointerAt,
+&ToolInput) -> bool` takes the pointer position (in squares, the cell
+under it, and the nearest grid point) plus a plain struct of button
+states, and returns whether the chart changed. Because it doesn't touch
+egui at all, the tests drive it with synthetic input - e.g. "press at
+(0,0), release at (2.5,1)" draws a backstitch - with no window. That's the
+testing trick for GUI behavior generally: pull the decision logic into a
+function over plain data, and keep the egui code as a thin layer that
+builds that data.
+
+Other things worth knowing:
+- **Which tools show** depends on the craft's profile
+  (`has_part_stitches`, `has_triangles`); the quilt version of the 3/4
+  tool is relabeled "Triangle (HST)" because it's the same operation.
+- **`ConvertSettings` / `chart_from_image` / `size_ui` /
+  `convert_settings_ui`** are shared with `image_import.rs` and
+  `text_import.rs`, so all three agree on how a picture becomes a chart.
+  (This is the fourth-copy situation noted below for `SizeMode` - here it
+  *was* extracted into one place instead.)
+- **Switching craft** in the side panel re-matches colors that don't
+  belong to the new craft's catalogs (`Chart::rematch_colors`) - undo
+  brings them back, since it's just another text snapshot.
+- **`render_image`** is the PNG export (non-square cells for knitting,
+  transparent empties for pixel art).
+- **`show_materials`** is the Materials tab: `export::info_lines`, the
+  color key, the shopping list and (knitting/quilting) the written
+  instructions - all from the chart crate, so the tab, PDF and text export
+  say the same things.
 
 ## `grid.rs` - the shaped-pattern stitch grid
 
@@ -214,6 +283,14 @@ about to add a fourth copy, that's a signal it might be worth actually
 extracting - three duplicates is the point where "just copy it" often
 stops paying for itself.
 
+When a chart craft is loaded, both tabs take the craft as a parameter and
+switch to chart output: the size control becomes the craft's own (`size_ui`
+- Aida count, bead size, knitting gauge, quilt square), the filet option
+disappears, and the preview shows the colors *after* catalog matching, so
+what you see is what "Send to Chart editor" will give you. The payload's
+`chart: Option<(Chart, ConvertSettings)>` carries that chart plus the
+settings, so the editor can keep re-rendering from the source picture.
+
 `text_import.rs`'s `render_text_image` centers **each line independently**
 (not the whole text block as one unit) - measuring each line's width via
 `imageproc::drawing::text_size` and centering it individually within the
@@ -284,3 +361,8 @@ back.
    refresh on recompile.
 4. If it's a big 2D grid of small elements, use the texture-based rendering
    pattern from `colorwork_grid.rs`, not per-cell widgets.
+5. If it's a chart-craft feature, it probably belongs in
+   `crates/crossstitch` (model/logic, testable without a window) with a
+   thin UI in `crossstitch_grid.rs`; if it only applies to some crafts,
+   add a question to `GridCraft` in `profile.rs` rather than checking the
+   craft by name all over the GUI.

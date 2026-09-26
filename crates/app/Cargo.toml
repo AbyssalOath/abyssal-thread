@@ -34,6 +34,7 @@ abyssal-thread-lang = { path = "../lang" }
 abyssal-thread-layout = { path = "../layout" }
 abyssal-thread-export = { path = "../export" }
 abyssal-thread-imageimport = { path = "../imageimport" }
+abyssal-thread-crossstitch = { path = "../crossstitch" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 petgraph = { workspace = true }

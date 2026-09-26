@@ -142,10 +142,35 @@ directly without going through `recompile_from_dsl` (or one of the
 `sync_dsl_from_*` wrappers around it). Grep for direct assignments to
 those fields outside `mod.rs`'s existing ones as the first debugging step.
 
+## Chart crafts: "why does X behave like that"
+
+- **A picture import came out with fewer colors than I asked for.** Colors
+  are clustered first (k-means) and then matched to a real product
+  catalog; two clusters can land on the same DMC floss / Perler bead and
+  merge. Speck removal can also drop a color whose only cells were specks.
+- **Colors changed when I switched craft.** Colors that aren't in the new
+  craft's catalogs are re-matched (e.g. DMC floss → Hama beads). Undo
+  restores them.
+- **The white parts of my picture are empty.** "Leave background empty /
+  unstitched" treats the most common color around the picture's edge as
+  background. Turn it off to stitch the background too (it's off by
+  default for diamond painting, latch hook, knitting and quilting).
+- **An `.oxs` file opened with a warning.** Items the chart model doesn't
+  have (beads, daisy and bugle stitches, buttons...) are listed rather than
+  silently dropped; everything else imported. OXS save only exists for
+  cross stitch and diamond painting.
+- **`build` on the CLI refuses a `.cgp`.** It compiles crochet only; a
+  `.cgp` with a chart-craft `CRAFT:` line is meant for the GUI.
+- **A knit chart looks squashed / the finished size seems off.** Check the
+  gauge: knitting charts use separate stitch and row gauges, and the
+  defaults are yarn-weight presets, not your swatch.
+- **Where the color data came from, and its licenses** - see the module
+  doc in `crates/crossstitch/src/threads.rs`.
+
 ## Undo/redo is DSL-text snapshots only
 
 It does not survive a crash (in-memory `Vec<String>` history, dies with the
-process) - that's what the separate autosave/crash-recovery mechanism is
+process; for chart crafts the snapshots are the chart's `.cgp` text) - that's what the separate autosave/crash-recovery mechanism is
 for (see [07-app-gui.md](07-app-gui.md)'s "Crash recovery" section). If
 you're debugging "undo doesn't reach far enough back," remember
 `HISTORY_LIMIT = 50` snapshots, and check whether the edit you expect to

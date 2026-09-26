@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 mod gui;
 mod print;
+mod print_crossstitch;
 mod print_shaped;
 mod update;
 
@@ -142,6 +143,12 @@ fn build(
     relax_iterations: usize,
 ) -> Result<()> {
     let src = fs::read_to_string(&input).with_context(|| format!("reading {}", input.display()))?;
+    if abyssal_thread_crossstitch::is_chart_source(&src) {
+        anyhow::bail!(
+            "{} is a chart pattern (cross stitch, beads...) - `build` compiles crochet patterns only; open it in the GUI instead",
+            input.display()
+        );
+    }
 
     let pattern = abyssal_thread_lang::parser::parse(&src)
         .map_err(|e| anyhow::anyhow!("parse error: {e}"))?;

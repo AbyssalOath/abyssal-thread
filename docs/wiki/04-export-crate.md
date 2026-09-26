@@ -64,6 +64,12 @@ example of why curated lookup tables like this tend to need real-world
 input samples to fill gaps, not just "add every named color you can think
 of" up front.
 
+`nearest_color_name` is also used outside this crate: the chart crafts
+without a manufacturer color catalog (latch hook, Pixelhobby, pixel
+macrame, pixel art, and quilt fabrics) name each color with it plus its
+hex code ("Olive #63a03f") - see `crossstitch::Floss::free`. That's the
+one reason `crates/crossstitch` depends on `export`.
+
 ## `obj.rs` - Wavefront OBJ point/line export
 
 Deliberately minimal: one vertex per stitch position (scaled mm→m), one
@@ -80,10 +86,10 @@ possible thing that could work.
 `ColorGrid`, and the module doc explains why: filet is an open dc+chain
 *mesh* (block = solid, space = open), and `core::colorwork`'s
 one-single-crochet-per-cell bridge is structurally the wrong stitch for
-that. This is the newest feature in the codebase (see the recent "Adding
-Filet Crochet pattern feature" commit) and it's **not yet mentioned in
-`ARCHITECTURE.md`'s pipeline diagram** - worth keeping in mind if you're
-cross-referencing that doc, it predates this module.
+that. It arrived in 0.2.7 (the "Adding Filet Crochet pattern feature" commit).
+It isn't drawn in `ARCHITECTURE.md`'s crochet pipeline diagram, since it
+bypasses the stitch graph, but it's described under that file's
+"Working - image import" and "printing" notes.
 
 Two functions: `starting_chain(width)` (foundation chain length: `3 *
 width + 1 + TURNING_CHAIN`, each column takes 3 stitches, +1 to close the

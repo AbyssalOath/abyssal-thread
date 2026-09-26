@@ -13,7 +13,10 @@ The `app` crate is both the CLI binary and the GUI (see
   job, and reading `build()` top to bottom is honestly the fastest way to
   see the entire library pipeline invoked in the "boring", non-GUI way -
   useful as a reference if you're debugging whether a bug is in the
-  pipeline itself vs. somewhere GUI-specific.
+  pipeline itself vs. somewhere GUI-specific. Crochet only: if the file is
+  a chart-craft `.cgp` (`crossstitch::is_chart_source`), `build` stops
+  with a clear message rather than a confusing crochet parse error. The
+  chart crafts have no CLI yet.
 - **`Gui { input: Option<PathBuf> }`** - launches `gui::run`.
 
 `command: Option<Commands>` (not a required subcommand) plus

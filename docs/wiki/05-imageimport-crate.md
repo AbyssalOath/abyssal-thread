@@ -68,6 +68,21 @@ k-means re-clustering wouldn't give you (the two output colors could
 reshuffle unpredictably as the slider moves). Used for filet-crochet mode
 (see `04-export-crate.md`'s `filet.rs` section) and nowhere else.
 
+## Reused by the chart crafts
+
+The chart crafts (see [11-crossstitch-crate.md](11-crossstitch-crate.md))
+don't have their own image pipeline - `gui/crossstitch_grid.rs`'s
+`chart_from_image` calls `quantize` exactly as crochet colorwork does, and
+only then matches each resulting color to a real product (DMC floss,
+Perler beads...) with CIEDE2000. Doing k-means first and catalog-matching
+second keeps this crate craft-agnostic, and means the catalog match runs
+once per *distinct* color (a handful) instead of once per pixel. One side
+effect worth knowing: two k-means colors can land on the same catalog
+color and merge, so a chart can end up with fewer colors than you asked
+for. For knitting, the resize step asks for extra rows (by the row/stitch
+gauge ratio) so a picture keeps its proportions when stitches are wider
+than they are tall.
+
 ## Testing pattern worth noting
 
 Every function here has a matching "handles the degenerate case" test

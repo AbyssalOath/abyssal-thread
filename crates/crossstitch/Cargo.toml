@@ -1,0 +1,14 @@
+[package]
+name = "abyssal-thread-crossstitch"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+abyssal-thread-core = { path = "../core" }
+# nearest_color_name, for naming free (non-catalog) colors.
+abyssal-thread-export = { path = "../export" }
+thiserror = { workspace = true }
+# Read-only XML parsing for .oxs import - no dependencies of its own and no
+# unsafe, which keeps it out of `cargo audit`'s way (see .cargo/audit.toml).
+# Writing .oxs is plain string formatting (see oxs.rs), so no writer crate.
+roxmltree = "0.20"

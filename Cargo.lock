@@ -20,10 +20,11 @@ checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
 
 [[package]]
 name = "abyssal-thread"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "ab_glyph",
  "abyssal-thread-core",
+ "abyssal-thread-crossstitch",
  "abyssal-thread-export",
  "abyssal-thread-imageimport",
  "abyssal-thread-lang",
@@ -48,15 +49,25 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-core"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "petgraph",
  "serde",
 ]
 
 [[package]]
+name = "abyssal-thread-crossstitch"
+version = "0.2.9"
+dependencies = [
+ "abyssal-thread-core",
+ "abyssal-thread-export",
+ "roxmltree",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "abyssal-thread-export"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "abyssal-thread-core",
  "petgraph",
@@ -64,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-imageimport"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "abyssal-thread-core",
  "anyhow",
@@ -73,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-lang"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "abyssal-thread-core",
  "petgraph",
@@ -82,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "abyssal-thread-layout"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "abyssal-thread-core",
  "petgraph",
@@ -3785,6 +3796,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4247,7 +4264,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",

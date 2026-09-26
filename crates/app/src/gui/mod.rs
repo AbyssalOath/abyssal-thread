@@ -10,15 +10,17 @@
 //! safety net for that, not a fix for it.
 
 pub mod colorwork_grid;
+pub mod crossstitch_grid;
 pub mod def_builder;
 pub mod fonts;
 pub mod grid;
 pub mod image_import;
+pub mod new_pattern;
 pub mod recent_colors;
 pub mod text_import;
 pub mod viewport;
 
-use abyssal_thread_core::StitchGraph;
+use abyssal_thread_core::{Craft, StitchGraph};
 use abyssal_thread_lang::Pattern;
 use eframe::egui;
 use petgraph::graph::NodeIndex;
@@ -72,6 +74,8 @@ enum ViewMode {
     Dsl,
     ImageImport,
     TextImport,
+    /// Cross stitch only: floss shopping list and fabric/hoop summary.
+    Materials,
 }
 
 /// Decodes the bundled app icon into the RGBA form `eframe`'s window/
@@ -103,6 +107,7 @@ pub fn run(initial_input: Option<PathBuf>) -> anyhow::Result<()> {
         // recover the autosave - the person told us exactly what they
         // want open.
         app.pending_recovery = None;
+        app.show_new_pattern = false;
         app.load_path = path.display().to_string();
         app.load_from_path();
     }
@@ -144,6 +149,17 @@ pub struct GoblinApp {
     /// and is kept in sync with `dsl_source`/`graph` by
     /// `sync_dsl_from_colorwork` and `recompile_from_dsl`.
     colorwork: Option<colorwork_grid::ColorworkGridState>,
+    /// Which craft the loaded pattern is for - derived from the pattern
+    /// text on every recompile (see `recompile_from_dsl`), never set as
+    /// an independent mode.
+    craft: Craft,
+    /// `Some` when a cross-stitch chart is loaded. For cross stitch,
+    /// `dsl_source` holds the chart's `.cgp` text (see
+    /// `abyssal_thread_crossstitch::cgp`), so undo/redo/autosave work
+    /// exactly as they do for crochet.
+    xstitch: Option<crossstitch_grid::CrossStitchState>,
+    /// The "New pattern" craft picker window.
+    show_new_pattern: bool,
     selected_nodes: Vec<NodeIndex>,
     history: Vec<String>,
     future: Vec<String>,
@@ -234,6 +250,9 @@ impl Default for GoblinApp {
             image_import: image_import::ImageImportState::default(),
             text_import: text_import::TextImportState::default(),
             colorwork: None,
+            craft: Craft::Crochet,
+            xstitch: None,
+            show_new_pattern: true,
             selected_nodes: Vec::new(),
             history: Vec::new(),
             future: Vec::new(),
@@ -282,6 +301,9 @@ impl Default for GoblinApp {
         if let Ok(recovered) = std::fs::read_to_string(autosave_path()) {
             if !recovered.trim().is_empty() && recovered != app.dsl_source {
                 app.pending_recovery = Some(recovered);
+                // Recovering picks the pattern; the picker comes back
+                // only if they discard it (see the recovery prompt).
+                app.show_new_pattern = false;
             }
         }
         app
@@ -291,6 +313,10 @@ impl Default for GoblinApp {
 impl GoblinApp {
     fn recompile_from_dsl(&mut self) {
         self.compile_warnings.clear();
+        if abyssal_thread_crossstitch::is_chart_source(&self.dsl_source) {
+            self.recompile_chart();
+            return;
+        }
         match abyssal_thread_lang::parser::parse(&self.dsl_source) {
             Ok(pattern) => {
                 self.pattern_name = pattern.name.clone();
@@ -346,6 +372,11 @@ impl GoblinApp {
                         // doc comment. Cloned ahead of the move into
                         // `self.graph` below.
                         self.compile_warnings = g.warnings.clone();
+                        self.craft = Craft::Crochet;
+                        self.xstitch = None;
+                        if self.view_mode == ViewMode::Materials {
+                            self.view_mode = ViewMode::Grid;
+                        }
                         self.graph = Some(g);
                         self.pattern = Some(pattern);
                         self.status = "Compiled OK.".to_string();
@@ -363,6 +394,121 @@ impl GoblinApp {
             }
             Err(e) => self.status = format!("parse error: {e}"),
         }
+    }
+
+    /// Cross-stitch half of `recompile_from_dsl`: parses `dsl_source` as a
+    /// cross-stitch `.cgp` and updates the chart editor in place (keeping
+    /// its selected floss/zoom/source image, the same reason the
+    /// colorwork branch above updates rather than replaces).
+    fn recompile_chart(&mut self) {
+        match abyssal_thread_crossstitch::parse_cgp(&self.dsl_source) {
+            Ok(chart) => {
+                self.pattern_name = chart.name.clone();
+                let chart_craft = chart.craft.craft();
+                match &mut self.xstitch {
+                    Some(state) => state.replace_chart(chart),
+                    None => self.xstitch = Some(crossstitch_grid::CrossStitchState::new(chart)),
+                }
+                self.craft = chart_craft;
+                self.graph = None;
+                self.pattern = None;
+                self.colorwork = None;
+                self.selected_nodes.clear();
+                if self.view_mode == ViewMode::Viewport3D {
+                    self.view_mode = ViewMode::Grid;
+                }
+                self.status = "Chart OK.".to_string();
+                let _ = std::fs::write(autosave_path(), &self.dsl_source);
+            }
+            Err(e) => self.status = format!("chart error: {e}"),
+        }
+    }
+
+    /// Mirrors `sync_dsl_from_colorwork` for the cross-stitch editor.
+    fn sync_dsl_from_xstitch(&mut self) {
+        let Some(state) = &self.xstitch else { return };
+        let old = self.dsl_source.clone();
+        let new = abyssal_thread_crossstitch::to_cgp(&state.chart);
+        if new != old {
+            self.push_history(old);
+        }
+        self.dsl_source = new;
+        self.recompile_from_dsl();
+    }
+
+    /// Replaces the current pattern with a cross-stitch chart.
+    fn load_chart(&mut self, mut chart: abyssal_thread_crossstitch::Chart) {
+        if chart.name.is_none() {
+            chart.name = Some("untitled".to_string());
+        }
+        self.push_history(self.dsl_source.clone());
+        self.dsl_source = abyssal_thread_crossstitch::to_cgp(&chart);
+        self.recompile_from_dsl();
+    }
+
+    fn new_blank_crochet(&mut self) {
+        let blank = abyssal_thread_core::ColorGrid::new(20, 20, [255, 255, 255]);
+        self.push_history(self.dsl_source.clone());
+        self.dsl_source = abyssal_thread_lang::color_grid_to_dsl(Some("untitled"), &blank);
+        self.colorwork = None;
+        self.recompile_from_dsl();
+    }
+
+    /// A blank chart for any grid craft, at the craft's default size,
+    /// with its closest-to-black color ready to draw with.
+    fn new_blank_chart(&mut self, craft: abyssal_thread_crossstitch::GridCraft) {
+        use abyssal_thread_crossstitch::Floss;
+        let mut chart = abyssal_thread_crossstitch::Chart::new_for(craft);
+        chart.name = Some("untitled".to_string());
+        let black = match craft.default_catalog() {
+            Some(cat) => Floss::from_thread(cat.nearest([0, 0, 0]), 'X'),
+            None => Floss::free([0, 0, 0], 'X'),
+        };
+        chart.add_floss(black);
+        self.xstitch = None;
+        self.load_chart(chart);
+    }
+
+    /// Whether the loaded chart can be saved as OXS - the format only
+    /// defines cross stitch (and diamond painting, which uses its full
+    /// stitches).
+    fn chart_supports_oxs(&self) -> bool {
+        use abyssal_thread_crossstitch::GridCraft;
+        self.xstitch.as_ref().is_some_and(|s| {
+            matches!(
+                s.chart.craft,
+                GridCraft::CrossStitch | GridCraft::DiamondPainting
+            )
+        })
+    }
+
+    fn start_new_pattern(&mut self, craft: Craft, start: new_pattern::Start) {
+        use new_pattern::Start;
+        if start == Start::OpenFile {
+            let mut dialog = rfd::FileDialog::new();
+            dialog = match craft {
+                Craft::CrossStitch | Craft::DiamondPainting => dialog
+                    .add_filter("Chart pattern", &["oxs", "cgp"])
+                    .add_filter("OXS (MacStitch/WinStitch/KXStitch)", &["oxs"]),
+                _ => dialog.add_filter("Pattern", &["cgp"]),
+            };
+            if let Some(path) = dialog.pick_file() {
+                self.load_path = path.display().to_string();
+                self.load_from_path();
+            } else {
+                self.show_new_pattern = true;
+            }
+            return;
+        }
+        match abyssal_thread_crossstitch::GridCraft::from_craft(craft) {
+            Some(grid) => self.new_blank_chart(grid),
+            None => self.new_blank_crochet(),
+        }
+        self.view_mode = match start {
+            Start::Picture => ViewMode::ImageImport,
+            Start::Text => ViewMode::TextImport,
+            _ => ViewMode::Grid,
+        };
     }
 
     /// Serializes `self.grid` back to DSL text and recompiles. If the
@@ -419,6 +565,19 @@ impl GoblinApp {
     /// was still `None`), it would only know about the parsed `ColorGrid`
     /// from DSL text, which has no way to carry an original photo at all.
     fn load_color_grid(&mut self, payload: image_import::GridImportPayload) {
+        if let Some((mut chart, convert)) = payload.chart {
+            chart.name = self.pattern_name.clone();
+            self.xstitch = Some(crossstitch_grid::CrossStitchState::from_import(
+                chart.clone(),
+                payload.source,
+                payload.colors,
+                payload.filter,
+                convert,
+            ));
+            self.load_chart(chart);
+            self.view_mode = ViewMode::Grid;
+            return;
+        }
         self.push_history(self.dsl_source.clone());
         self.dsl_source =
             abyssal_thread_lang::color_grid_to_dsl(self.pattern_name.as_deref(), &payload.grid);
@@ -460,6 +619,13 @@ impl GoblinApp {
     }
 
     fn load_from_path(&mut self) {
+        let is_oxs = Path::new(&self.load_path)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("oxs"));
+        if is_oxs {
+            self.load_oxs();
+            return;
+        }
         match std::fs::read_to_string(&self.load_path) {
             Ok(src) => {
                 self.push_history(self.dsl_source.clone());
@@ -470,8 +636,61 @@ impl GoblinApp {
         }
     }
 
+    fn load_oxs(&mut self) {
+        let text = match std::fs::read_to_string(&self.load_path) {
+            Ok(t) => t,
+            Err(e) => {
+                self.status = format!("couldn't read {}: {e}", self.load_path);
+                return;
+            }
+        };
+        match abyssal_thread_crossstitch::parse_oxs(&text) {
+            Ok(abyssal_thread_crossstitch::OxsImport {
+                mut chart,
+                warnings,
+            }) => {
+                if chart.name.is_none() {
+                    chart.name = Path::new(&self.load_path)
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned());
+                }
+                self.xstitch = None;
+                self.load_chart(chart);
+                self.view_mode = ViewMode::Grid;
+                if !warnings.is_empty() {
+                    self.status = format!("{} NOTE: {}", self.status, warnings.join("; "));
+                }
+            }
+            Err(e) => self.status = format!("couldn't open {}: {e}", self.load_path),
+        }
+    }
+
     fn save_to_path(&mut self) {
-        match std::fs::write(&self.save_path, &self.dsl_source) {
+        let is_oxs = Path::new(&self.save_path)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("oxs"));
+        let contents = if is_oxs {
+            match &self.xstitch {
+                Some(state) if self.chart_supports_oxs() => {
+                    abyssal_thread_crossstitch::to_oxs(&state.chart)
+                }
+                Some(state) => {
+                    self.status = format!(
+                        "OXS is a cross-stitch format - save {} charts as .cgp",
+                        state.chart.craft.label().to_lowercase()
+                    );
+                    return;
+                }
+                None => {
+                    self.status =
+                        "OXS is a cross-stitch format - save crochet patterns as .cgp".to_string();
+                    return;
+                }
+            }
+        } else {
+            self.dsl_source.clone()
+        };
+        match std::fs::write(&self.save_path, contents) {
             Ok(()) => self.status = format!("saved to {}", self.save_path),
             Err(e) => self.status = format!("couldn't write {}: {e}", self.save_path),
         }
@@ -485,6 +704,14 @@ impl GoblinApp {
         // This was a real bug: exporting SVG from this toolbar while
         // editing a colorwork pattern produced a useless uniform grid
         // instead of the actual image.
+        if let Some(state) = &self.xstitch {
+            let svg = abyssal_thread_crossstitch::export::export_chart_svg(&state.chart);
+            match std::fs::write(&self.export_svg_path, svg) {
+                Ok(()) => self.status = format!("wrote SVG chart to {}", self.export_svg_path),
+                Err(e) => self.status = format!("couldn't write {}: {e}", self.export_svg_path),
+            }
+            return;
+        }
         if let Some(state) = &self.colorwork {
             let chart = abyssal_thread_export::export_color_chart_svg(&state.grid);
             match std::fs::write(&self.export_svg_path, chart) {
@@ -512,6 +739,14 @@ impl GoblinApp {
     /// after sending a grid to the paint editor and making manual
     /// touch-ups there.
     fn export_legend(&mut self) {
+        if let Some(state) = &self.xstitch {
+            let text = abyssal_thread_crossstitch::export::materials_text(&state.chart);
+            match std::fs::write(&self.export_legend_path, text) {
+                Ok(()) => self.status = format!("wrote floss list to {}", self.export_legend_path),
+                Err(e) => self.status = format!("couldn't write {}: {e}", self.export_legend_path),
+            }
+            return;
+        }
         let Some(state) = &self.colorwork else {
             self.status = "legend export is only available for colorwork patterns".to_string();
             return;
@@ -549,7 +784,16 @@ impl GoblinApp {
             .clone()
             .unwrap_or_else(|| "pattern".to_string());
         let instructions = self.filet_pdf_instructions();
-        let result = if let Some(state) = &self.colorwork {
+        let result = if let Some(state) = &self.xstitch {
+            crate::print_crossstitch::generate_cross_stitch_pdf(
+                &state.chart,
+                cell_mm,
+                &name,
+                Path::new(&self.export_pdf_path),
+                self.print_page_size,
+                self.print_margin_in * 25.4,
+            )
+        } else if let Some(state) = &self.colorwork {
             crate::print::generate_pattern_pdf(
                 &state.grid,
                 cell_mm,
@@ -590,7 +834,15 @@ impl GoblinApp {
             .clone()
             .unwrap_or_else(|| "pattern".to_string());
         let instructions = self.filet_pdf_instructions();
-        let result = if let Some(state) = &self.colorwork {
+        let result = if let Some(state) = &self.xstitch {
+            crate::print_crossstitch::print_cross_stitch_via_system_default(
+                &state.chart,
+                cell_mm,
+                &name,
+                self.print_page_size,
+                self.print_margin_in * 25.4,
+            )
+        } else if let Some(state) = &self.colorwork {
             crate::print::print_via_system_default(
                 &state.grid,
                 cell_mm,
@@ -742,6 +994,7 @@ impl eframe::App for GoblinApp {
                 self.pending_recovery = None;
             } else if discard {
                 self.pending_recovery = None;
+                self.show_new_pattern = true;
             }
             // Nothing else renders underneath while this is up - the
             // person needs to make this call before touching anything
@@ -777,9 +1030,15 @@ impl eframe::App for GoblinApp {
                 }
                 ui.separator();
 
+                if ui.button("New...").clicked() {
+                    self.show_new_pattern = true;
+                }
                 if ui.button("Open...").clicked() {
-                    if let Some(path) =
-                        rfd::FileDialog::new().add_filter("Crochet pattern", &["cgp"]).pick_file()
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Pattern", &["cgp", "oxs"])
+                        .add_filter("Abyssal Thread pattern (any craft)", &["cgp"])
+                        .add_filter("OXS cross stitch (MacStitch/WinStitch/KXStitch)", &["oxs"])
+                        .pick_file()
                     {
                         self.load_path = path.display().to_string();
                         self.load_from_path();
@@ -792,8 +1051,15 @@ impl eframe::App for GoblinApp {
                     self.save_to_path();
                 }
                 if ui.button("Save As...").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Crochet pattern", &["cgp"])
+                    let mut dialog = rfd::FileDialog::new();
+                    dialog = if self.chart_supports_oxs() {
+                        dialog
+                            .add_filter(format!("{} pattern (.cgp)", self.craft.label()), &["cgp"])
+                            .add_filter("OXS (MacStitch/WinStitch/KXStitch)", &["oxs"])
+                    } else {
+                        dialog.add_filter(format!("{} pattern", self.craft.label()), &["cgp"])
+                    };
+                    if let Some(path) = dialog
                         .set_file_name(&self.save_path)
                         .save_file()
                     {
@@ -814,7 +1080,10 @@ impl eframe::App for GoblinApp {
                         self.export_svg();
                     }
                 }
-                if ui.button("Export OBJ...").clicked() {
+                if ui
+                    .add_enabled(self.graph.is_some(), egui::Button::new("Export OBJ..."))
+                    .clicked()
+                {
                     if let Some(path) = rfd::FileDialog::new()
                         .add_filter("Wavefront OBJ", &["obj"])
                         .set_file_name(&self.export_obj_path)
@@ -826,10 +1095,10 @@ impl eframe::App for GoblinApp {
                 }
                 if ui
                     .add_enabled(
-                        self.colorwork.is_some(),
+                        self.colorwork.is_some() || self.xstitch.is_some(),
                         egui::Button::new("Export legend..."),
                     )
-                    .on_hover_text("Colorwork patterns only - hex/name legend for the current colors.")
+                    .on_hover_text("Colorwork: hex/name legend for the current colors. Cross stitch: floss key and shopping list.")
                     .clicked()
                 {
                     if let Some(path) = rfd::FileDialog::new()
@@ -842,8 +1111,8 @@ impl eframe::App for GoblinApp {
                     }
                 }
                 if ui
-                    .add_enabled(self.colorwork.is_some() || self.graph.is_some(), egui::Button::new("Export PDF..."))
-                    .on_hover_text("Colorwork patterns only - multi-page tiled printable chart, cross-stitch-pattern style.")
+                    .add_enabled(self.colorwork.is_some() || self.graph.is_some() || self.xstitch.is_some(), egui::Button::new("Export PDF..."))
+                    .on_hover_text("Multi-page tiled printable chart with a legend (and, for chart crafts, the color key and shopping list).")
                     .clicked()
                 {
                     if let Some(path) = rfd::FileDialog::new()
@@ -873,7 +1142,7 @@ impl eframe::App for GoblinApp {
                         .suffix(" in"),
                 );
                 if ui
-                    .add_enabled(self.colorwork.is_some() || self.graph.is_some(), egui::Button::new("Print..."))
+                    .add_enabled(self.colorwork.is_some() || self.graph.is_some() || self.xstitch.is_some(), egui::Button::new("Print..."))
                     .on_hover_text("Opens the pattern as a PDF in your default viewer, ready to print from there.")
                     .clicked()
                 {
@@ -938,23 +1207,67 @@ impl eframe::App for GoblinApp {
             }
         }
 
+        if self.show_new_pattern {
+            if let Some((craft, start)) = new_pattern::show(ctx, &mut self.show_new_pattern) {
+                self.start_new_pattern(craft, start);
+            }
+        }
+
+        // Any grid craft (cross stitch, beads, diamond painting...) uses
+        // the chart editor rather than crochet's grid/3D views.
+        let is_chart = self.xstitch.is_some();
+        let craft_lower = self.craft.label().to_lowercase();
         egui::TopBottomPanel::top("view_tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.view_mode, ViewMode::Grid, "\u{1F9F6} Grid");
-                ui.selectable_value(&mut self.view_mode, ViewMode::Viewport3D, "\u{1F9CA} 3D");
-                ui.selectable_value(&mut self.view_mode, ViewMode::Dsl, "\u{1F4DD} DSL");
+                ui.label(egui::RichText::new(self.craft.label()).strong());
+                ui.separator();
+                if is_chart {
+                    ui.selectable_value(&mut self.view_mode, ViewMode::Grid, "\u{2716} Chart");
+                } else {
+                    ui.selectable_value(&mut self.view_mode, ViewMode::Grid, "\u{1F9F6} Grid");
+                    ui.selectable_value(&mut self.view_mode, ViewMode::Viewport3D, "\u{1F9CA} 3D");
+                }
+                ui.selectable_value(
+                    &mut self.view_mode,
+                    ViewMode::Dsl,
+                    if is_chart {
+                        "\u{1F4DD} Source"
+                    } else {
+                        "\u{1F4DD} DSL"
+                    },
+                );
                 ui.selectable_value(
                     &mut self.view_mode,
                     ViewMode::ImageImport,
                     "\u{1F5BC} Image import",
                 );
                 ui.selectable_value(&mut self.view_mode, ViewMode::TextImport, "\u{1F524} Text");
+                if is_chart {
+                    ui.selectable_value(
+                        &mut self.view_mode,
+                        ViewMode::Materials,
+                        "\u{1F9FE} Materials",
+                    );
+                }
             });
         });
 
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(&self.status);
+                if let Some(state) = &self.xstitch {
+                    let c = &state.chart;
+                    let (w_in, h_in) = c.finished_size_in();
+                    ui.separator();
+                    let (_, cells) = c.craft.cell_word();
+                    ui.label(format!(
+                        "{} x {} grid, {} {cells}, {} colors - {w_in:.1} x {h_in:.1} in",
+                        c.width,
+                        c.height,
+                        c.total_stitches(),
+                        c.palette.len(),
+                    ));
+                }
                 if let Some(g) = &self.graph {
                     let report = abyssal_thread_layout::summarize_tension(g);
                     ui.separator();
@@ -982,7 +1295,11 @@ impl eframe::App for GoblinApp {
         match self.view_mode {
             ViewMode::Dsl => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("DSL");
+                    ui.heading(if is_chart {
+                        "Chart source (.cgp)"
+                    } else {
+                        "DSL"
+                    });
                     let response = ui.add(
                         egui::TextEdit::multiline(&mut self.dsl_source)
                             .desired_rows(30)
@@ -1000,6 +1317,9 @@ impl eframe::App for GoblinApp {
                         self.recompile_from_dsl();
                     }
                     ui.separator();
+                    if is_chart {
+                        return;
+                    }
                     ui.collapsing("Custom stitch builder (DEF)", |ui| {
                         if let Some(def_line) = def_builder::show(ui, &mut self.def_builder) {
                             self.push_history(self.dsl_source.clone());
@@ -1030,19 +1350,52 @@ impl eframe::App for GoblinApp {
             }
             ViewMode::ImageImport => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("Convert a picture into a colorwork chart");
-                    if let Some(payload) = image_import::show(ui, &mut self.image_import) {
+                    ui.heading(if is_chart {
+                        format!("Convert a picture into a {craft_lower} chart")
+                    } else {
+                        "Convert a picture into a colorwork chart".to_string()
+                    });
+                    if let Some(payload) =
+                        image_import::show(ui, &mut self.image_import, self.craft)
+                    {
                         self.load_color_grid(payload);
                     }
                 });
             }
             ViewMode::TextImport => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("Type words into a colorwork chart");
-                    if let Some(payload) = text_import::show(ui, &mut self.text_import) {
+                    ui.heading(if is_chart {
+                        format!("Type words into a {craft_lower} chart")
+                    } else {
+                        "Type words into a colorwork chart".to_string()
+                    });
+                    if let Some(payload) = text_import::show(ui, &mut self.text_import, self.craft)
+                    {
                         self.load_color_grid(payload);
                     }
                 });
+            }
+            ViewMode::Materials => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("Materials");
+                    match &self.xstitch {
+                        Some(state) => crossstitch_grid::show_materials(ui, &state.chart),
+                        None => {
+                            ui.label("Materials lists are for chart crafts (cross stitch, beads, diamond painting...).");
+                        }
+                    }
+                });
+            }
+            ViewMode::Grid if self.xstitch.is_some() => {
+                let mut modified = false;
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    if let Some(state) = &mut self.xstitch {
+                        modified = crossstitch_grid::show(ui, state);
+                    }
+                });
+                if modified {
+                    self.sync_dsl_from_xstitch();
+                }
             }
             ViewMode::Grid => {
                 egui::CentralPanel::default().show(ctx, |ui| {

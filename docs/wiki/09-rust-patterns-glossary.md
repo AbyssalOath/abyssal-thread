@@ -199,6 +199,26 @@ is the right call whenever `#[derive(Default)]`'s field-by-field zero/empty
 semantics wouldn't actually be a sensible starting state - write the impl
 by hand instead of trying to force the derive to do something it can't.
 
+## `include_str!` + `OnceLock` for embedded data parsed once
+
+`crates/crossstitch/src/threads.rs` ships several color catalogs (DMC,
+Anchor, Perler...) inside the binary: each `data/*.tsv` file is embedded
+at compile time with `include_str!` (a `&'static str` - no file to find at
+runtime, same reason fonts use `include_bytes!`), and parsed into a
+`Vec<Thread>` the *first* time it's asked for:
+
+```rust
+static CATALOGS: [OnceLock<Vec<Thread>>; 9] = [const { OnceLock::new() }; 9];
+CATALOGS[self as usize].get_or_init(|| parse_catalog(self.brand(), tsv))
+```
+
+`std::sync::OnceLock` is the standard-library way to have a lazily
+initialized global: thread-safe, initialized at most once, and it hands
+out `&'static` references afterwards, so callers can keep `&'static
+Thread`s around freely. (Older code uses the `lazy_static` or `once_cell`
+crates for this - `OnceLock` replaced them.) The `[const { ... }; 9]`
+syntax is how you build an array of a non-`Copy` type in a `static`.
+
 ## Text as an intermediate representation, re-parsed rather than patched
 
 The whole GUI's edit model (mutate in-memory grid → serialize to DSL text →

@@ -116,6 +116,22 @@ to keep `core` dependency-light. `on_circle` is the one function worth
 knowing by name: it's the entire trigonometry behind `layout_ring`'s
 placement (see [03-layout-crate.md](03-layout-crate.md)).
 
+## `craft.rs` - `Craft`
+
+```rust
+pub enum Craft { Crochet, CrossStitch, Knitting, DiamondPainting, FuseBeads,
+                 PixelMacrame, LatchHook, Quilt, PixelHobby, PixelArt }
+```
+
+Every craft the app knows about, with a display `label()`, a one-line
+`blurb()` for the New Pattern picker's cards, and `is_available()` (the
+switch that let the picker show crafts as "coming soon" while they were
+being built - all ten are available now). It lives in `core`, not in the
+GUI or the chart crate, because it's shared vocabulary: the GUI picks one,
+and `crossstitch::GridCraft::craft()` maps each chart craft back to it.
+Crochet is the only `Craft` without a `GridCraft` - that's how the app
+tells "use the crochet pipeline" from "use the chart pipeline."
+
 ## `colorgrid.rs` - `ColorGrid`
 
 ```rust
@@ -131,3 +147,8 @@ but it isn't done today, and `ColorGrid` staying separate is why colorwork
 and shaped patterns can have such different tooling (paint grid vs.
 stitch-abbreviation grid) without either one leaking into the other's code
 path.
+
+`ColorGrid` is also the hand-off point for the chart crafts: picture and
+text import produce a `ColorGrid` exactly as they do for crochet
+colorwork, and `crossstitch::Chart::from_color_grid` takes it from there
+(see [11-crossstitch-crate.md](11-crossstitch-crate.md)).

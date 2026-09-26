@@ -1,11 +1,12 @@
-# `print.rs` / `print_shaped.rs` - PDF generation
+# `print.rs` / `print_shaped.rs` / `print_crossstitch.rs` - PDF generation
 
-Two parallel files: `print.rs` for colorwork patterns, `print_shaped.rs`
-for shaped patterns. Both build a multi-page tiled PDF via `printpdf`
-(pinned at 0.7 - see
+Three parallel files: `print.rs` for crochet colorwork patterns,
+`print_shaped.rs` for crochet shaped patterns, and `print_crossstitch.rs`
+for every chart craft (see the section at the end). All three build a
+multi-page tiled PDF via `printpdf` (pinned at 0.7 - see
 [10-troubleshooting.md](10-troubleshooting.md#printpdf-pinned-at-07) for
-why) and both reuse the *same* tiling math (`print::compute_tiling`,
-`print::PageSize`) - the tiling problem ("how many cells fit on a page,
+why) and all three reuse the *same* tiling math (`print::compute_tiling` /
+`compute_tiling_rect`, `print::PageSize`) - the tiling problem ("how many cells fit on a page,
 how many pages do I need") only cares about a width/height in cells, not
 what's actually drawn in each cell, so it's factored out once and shared.
 
@@ -87,6 +88,32 @@ onto extra pages after the legend page, computing
 more written content (e.g. a stitch-count summary line, per-color totals),
 this is the function to extend - it already handles arbitrary-length text
 spilling across as many pages as needed.
+
+## `print_crossstitch.rs` - every chart craft
+
+Same tiling approach, with a few additions worth knowing:
+
+- **Cover page(s):** `export::info_lines` (design summary worded for the
+  craft), a note on what the chart's shapes mean (cross stitch) or where
+  board lines are, the color key with swatches and symbols, and the
+  shopping list - continuing onto more pages if the palette is long
+  (`ensure_room`).
+- **Non-square cells:** knitting stitches are wider than tall, so it uses
+  `compute_tiling_rect(width, height, cell_w, cell_h, ...)` - the same
+  pure tiling math with separate cell width and height (`compute_tiling`
+  is now just the square-cell case of it).
+- **Chart pages** draw full cells with symbols, part stitches (triangles,
+  half-stitch bars, quarters), heavy counting lines (every 10, counted in
+  the chart's own numbering direction - `Chart::is_heavy_col_line`), red
+  board lines for pegboards/baseplates/quilt blocks, backstitch **clipped
+  at the page edge** (`clip_segment`, a small Liang-Barsky clipper, so a
+  line crossing a page boundary is drawn up to the edge on each page),
+  knots, and center arrows. Knitting numbers rows from the bottom and
+  stitches from the right, with row numbers on the right edge.
+- **Instructions pages:** knitting's row-by-row directions and a quilt's
+  cutting list and assembly go through the same `add_instructions_pages`
+  the filet feature uses, after `wrap_lines` breaks long rows at commas
+  (the instructions pages don't wrap on their own).
 
 ## The "select Color, not Grayscale" note
 

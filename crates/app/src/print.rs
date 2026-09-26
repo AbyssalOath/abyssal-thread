@@ -20,11 +20,11 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-const LABEL_STRIP_MM: f32 = 6.0; // room for row/col index numbers
-const FOOTER_STRIP_MM: f32 = 10.0; // room for the "page R,C of RxC" caption
+pub(crate) const LABEL_STRIP_MM: f32 = 6.0; // room for row/col index numbers
+pub(crate) const FOOTER_STRIP_MM: f32 = 10.0; // room for the "page R,C of RxC" caption
 /// Print a reference number every N cells along each tile's edges - dense
 /// enough to align tiles confidently, sparse enough not to clutter a page.
-const AXIS_LABEL_INTERVAL: usize = 10;
+pub(crate) const AXIS_LABEL_INTERVAL: usize = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PageSize {
@@ -60,10 +60,23 @@ pub fn compute_tiling(
     page: PageSize,
     margin_mm: f32,
 ) -> TilingPlan {
+    compute_tiling_rect(grid_width, grid_height, cell_mm, cell_mm, page, margin_mm)
+}
+
+/// `compute_tiling` for cells that aren't square (knitting charts, where
+/// a row is shorter than a stitch is wide).
+pub fn compute_tiling_rect(
+    grid_width: usize,
+    grid_height: usize,
+    cell_w_mm: f32,
+    cell_h_mm: f32,
+    page: PageSize,
+    margin_mm: f32,
+) -> TilingPlan {
     let usable_w = page.width_mm - 2.0 * margin_mm - LABEL_STRIP_MM;
     let usable_h = page.height_mm - 2.0 * margin_mm - LABEL_STRIP_MM - FOOTER_STRIP_MM;
-    let cells_per_page_x = ((usable_w / cell_mm).floor() as usize).max(1);
-    let cells_per_page_y = ((usable_h / cell_mm).floor() as usize).max(1);
+    let cells_per_page_x = ((usable_w / cell_w_mm).floor() as usize).max(1);
+    let cells_per_page_y = ((usable_h / cell_h_mm).floor() as usize).max(1);
     let pages_x = grid_width.div_ceil(cells_per_page_x);
     let pages_y = grid_height.div_ceil(cells_per_page_y);
     TilingPlan {
@@ -287,7 +300,7 @@ const INSTRUCTIONS_HEADING_SPACE_MM: f32 = 15.0;
 /// as `write_filet_instructions` does with one line per pattern row) below
 /// a heading, continuing onto further pages once a page's line budget
 /// runs out.
-fn add_instructions_pages(
+pub(crate) fn add_instructions_pages(
     doc: &PdfDocumentReference,
     font: &IndirectFontRef,
     font_bold: &IndirectFontRef,
@@ -352,7 +365,7 @@ pub fn print_via_system_default(
     Ok(())
 }
 
-fn sanitize_filename(name: &str) -> String {
+pub(crate) fn sanitize_filename(name: &str) -> String {
     let cleaned: String = name
         .chars()
         .map(|c| {

@@ -6,17 +6,18 @@ members = [
     "crates/layout",
     "crates/export",
     "crates/imageimport",
+    "crates/crossstitch",
     "crates/app",
 ]
 
 [workspace.package]
-version = "0.2.8"
+version = "0.2.9"
 edition = "2021"
-description = "A crochet CAD tool: DSL/paint grid -> 3D model -> chart/print export"
+description = "A crochet and cross-stitch CAD tool: DSL/paint grid -> 3D model -> chart/print export"
 repository = "https://github.com/AbyssalOath/abyssal-thread"
 readme = "README.md"
 license-file = "LICENSE"
-keywords = ["crochet", "cad", "pattern", "crafts"]
+keywords = ["crochet", "cross-stitch", "cad", "pattern", "crafts"]
 categories = ["graphics", "command-line-utilities"]
 
 [workspace.dependencies]

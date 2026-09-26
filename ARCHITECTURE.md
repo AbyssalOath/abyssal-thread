@@ -37,6 +37,23 @@ Since shaped-round stitches can also carry a per-stitch `~RRGGBB` color
 sound - a shaped, tapered amigurumi can have color-changing stripes without
 touching the colorwork grid at all.
 
+Every other craft (cross stitch, knitting, quilting, diamond painting,
+fuse beads, latch hook, Pixelhobby, pixel macrame, pixel art) uses a
+second, simpler pipeline - no stitch graph or 3D layout, just a chart:
+
+```
+picture / text --resize + k-means (imageimport)--> ColorGrid
+   --match to a color catalog, confetti cleanup--> Chart <--> .cgp / .oxs
+                                                     |
+       +-------------+--------------+----------------+-----------------+
+       |             |              |                |                 |
+  chart editor   export_chart_   render_image    materials_text /   print_crossstitch::
+  (egui)         svg             (PNG)           shopping_list /    generate_cross_stitch_pdf
+                                                  instructions_text
+```
+
+See "Crafts" below for how one `Chart` model serves all nine.
+
 ## Workspace layout
 
 ```
@@ -51,7 +68,8 @@ abyssal-thread/
 │                            file to put there by mistake
 ├── crates/
 │   ├── core/               StitchKind, StitchGraph (petgraph), Vec3,
-│   │                       ColorGrid, StitchGraph::from_color_grid
+│   │                       ColorGrid, StitchGraph::from_color_grid,
+│   │                       Craft (every craft, for the New Pattern picker)
 │   ├── lang/                lexer, parser, AST, eval (DSL -> StitchGraph),
 │   │                       custom-stitch alias + raw-geometry expansion
 │   │                       (raw_def.rs), COLORGRID: block parsing +
@@ -63,6 +81,17 @@ abyssal-thread/
 │   │                       export, nearest-match color naming
 │   ├── imageimport/        image loading, exact/aspect-locked resize,
 │   │                       k-means color quantization (farthest-point seeding)
+│   ├── crossstitch/        the chart crafts (named for the first one):
+│   │                       chart.rs (Chart model - cells, part stitches,
+│   │                       backstitch, knots, blends, boards, row gauge;
+│   │                       confetti cleanup, shopping list), profile.rs
+│   │                       (per-craft GridCraft settings), threads.rs +
+│   │                       data/*.tsv (DMC, Anchor, Diamond Dotz, Perler,
+│   │                       Hama, Artkal catalogs), color.rs (CIEDE2000),
+│   │                       cgp.rs / oxs.rs (file formats), knit.rs
+│   │                       (row instructions, float checks), quilt.rs
+│   │                       (cutting list, yardage, assembly), export.rs
+│   │                       (SVG, materials text, instructions)
 │   └── app/                CLI + GUI binary
 │       ├── assets/fonts/   bundled .ttf files (see "Text tab" below),
 │       │                   embedded into the binary via include_bytes!
@@ -70,6 +99,9 @@ abyssal-thread/
 │           ├── print.rs    multi-page tiled pattern PDF generation
 │           │               + hand-off to the OS's default PDF viewer
 │           ├── print_shaped.rs  same, for shaped (non-colorwork) patterns
+│           ├── print_crossstitch.rs  same, for every chart craft: cover
+│           │               page (info, key, shopping list), symbol-chart
+│           │               pages, instructions pages
 │           └── gui/        mod.rs (view tabs, undo/redo, DSL sync,
 │                           autosave/crash recovery), grid.rs (shaped
 │                           stitch grid), colorwork_grid.rs (paint grid:
@@ -81,7 +113,9 @@ abyssal-thread/
 │                           OS font enumeration via font-kit),
 │                           def_builder.rs (point-and-click DEF builder,
 │                           alias + raw-geometry forms), recent_colors.rs (shared
-│                           color-picker history)
+│                           color-picker history), new_pattern.rs (the
+│                           craft picker), crossstitch_grid.rs (chart
+│                           editor + Materials tab for every chart craft)
 ├── .github/
 │   ├── workflows/           ci.yml (check/test/build + fmt/clippy/audit as
 │   │                        separate jobs, on every push and PR),
@@ -100,7 +134,8 @@ abyssal-thread/
 
 ## Try it
 
-CLI (shaped patterns):
+CLI (crochet shaped patterns only - `build` refuses chart `.cgp` files
+with a clear message):
 ```bash
 cargo run -p abyssal-thread -- build examples/sphere.cgp --svg sphere.svg --obj sphere.obj --tension
 ```
@@ -111,9 +146,13 @@ GUI:
 ```bash
 cargo run -p abyssal-thread
 ```
-Opens directly into a blank paintable colorwork canvas. Tabs across the top
-switch between the Grid editor, 3D viewport, DSL text view, Image Import, and
-Text - all five stay in sync with each other automatically.
+Opens with the New Pattern picker: choose a craft, then start from a
+blank pattern, a picture, typed text, or a file (closing the picker leaves
+a blank crochet colorwork canvas). For crochet, tabs across the top switch
+between the Grid editor, 3D viewport, DSL text view, Image Import, and
+Text - all five stay in sync with each other automatically. For chart
+crafts the tabs are Chart, Source (the `.cgp` text), Image import, Text
+and Materials.
 
 ## DSL grammar implemented so far
 
@@ -145,6 +184,14 @@ A pattern is either shaped rounds or a colorwork grid, not both - `eval()`
 detects a `COLORGRID:` block and builds the graph via
 `StitchGraph::from_color_grid` instead of the round/repeat logic entirely.
 
+Chart crafts use their own line-based format in the same `.cgp` files -
+`CRAFT:`, `FABRIC:`, `THREAD n:`, `XSTITCH: WxH`, one `ROW n:` of thread
+numbers per row, plus optional `BOARD:`, `ROUND:`, `BLEND n:`,
+`BSSTRANDS n:`, `HALF:`, `SPLIT:`, `QUARTER:`, `BACK:` and `KNOT:` lines.
+The full grammar is in `crates/crossstitch/src/cgp.rs`'s module doc; a
+`CRAFT:` line naming a chart craft is what routes a file there instead of
+the crochet parser.
+
 Each newline starts a new round/row in shaped mode. `inc` and `dec` consume
 parent slots from the previous round the way real crochet shaping does
 (`inc` shares one parent between two children, `dec` merges two parents
@@ -160,6 +207,81 @@ against realistic large patterns (a 90,000-stitch multi-round pattern, a
 499,900-stitch pattern right at the boundary, 300 custom-stitch invocations
 at scale) to confirm they don't false-positive-reject legitimate large
 patterns - see "Testing" below.
+
+## Crafts
+
+`abyssal_thread_core::Craft` lists every craft; `Craft::is_available`
+gates which ones the GUI's New Pattern picker (`gui/new_pattern.rs`)
+offers (all ten, currently). The craft isn't an app-wide mode - it's
+derived from the loaded pattern on every recompile (a `.cgp` whose
+`CRAFT:` line names a chart craft is that craft, an `.oxs` opens as cross
+stitch, anything else is crochet), so opening a file never needs a mode
+switch first.
+
+**Cross stitch** (`crates/crossstitch`, `gui/crossstitch_grid.rs`,
+`print_crossstitch.rs`): for a cross-stitch pattern, `dsl_source` holds the
+chart's `.cgp` text (format documented in `crossstitch/src/cgp.rs`), which
+is what keeps undo/redo/autosave identical across crafts. Image/Text import
+reuse the crochet pipeline (resize + k-means) and then snap each color to
+the nearest DMC or Anchor floss by CIEDE2000, optionally leaving the
+background unstitched and merging "confetti" (patches smaller than N
+squares) into their surroundings (`Chart::remove_confetti`).
+
+Beyond full crosses the chart holds part stitches per square
+(`Partial::Half` / `Split` (3/4 stitches, matching OXS part-stitch
+directions 1-4) / `Quarters`), backstitch lines and French knots on grid
+points in half-square units, and blended threads. All of it round-trips
+through both `.oxs` (mapping documented in `oxs.rs`) and `.cgp`
+(`HALF:`/`SPLIT:`/`QUARTER:`/`BACK:`/`KNOT:`/`BLEND n:`/`BSSTRANDS n:`
+lines, documented in `cgp.rs`); OXS items we don't model (beads, daisy
+and bugle lines, buttons...) are reported as import warnings. Skein
+estimates add up thread per physical skein across stitch kinds, so a
+blend counts toward both of its threads. The catalogs' provenance is in
+`crossstitch/src/threads.rs`.
+
+**Other grid crafts** - diamond painting, fuse beads, latch hook,
+Pixelhobby, pixel macrame and pixel art - share the same `Chart` model
+and editor. `Chart::craft` (a `profile::GridCraft`, written as the `.cgp`
+`CRAFT:` value) selects a per-craft profile in `crossstitch/src/profile.rs`:
+cell name, cell-size presets (`Fabric::count` is cells per inch for every
+craft), color catalogs (DMC/Diamond Dotz drills, Perler/Hama/Artkal beads;
+crafts with no catalog use free colors named by `nearest_color_name`),
+board presets (`Chart::board`, `.cgp` `BOARD: WxH` - pegboards,
+Pixelhobby baseplates) and packaging (bags/pixelsquares plus spare
+allowance) that `Chart::shopping_list` turns into a buy list. Part
+stitches, backstitch, knots and hoop sizing stay cross-stitch-only. The
+editor can switch a chart between grid crafts, re-matching colors to the
+new craft's catalog (`Chart::rematch_colors`), and exports PNG images;
+OXS saving is limited to cross stitch and diamond painting, the crafts
+the OXS spec defines. Bead/drill catalog provenance is in
+`crossstitch/src/threads.rs`; Pixelhobby has no open color dataset, so
+it uses free colors.
+
+**Knitting** (colorwork charts) and **quilting** (pixel / half-square-
+triangle quilts) are grid crafts too, with extra model support:
+
+- `Fabric::count_y` is a separate row gauge, so cells can be non-square
+  (`Fabric::cell_aspect`). The editor, PDF (`print::compute_tiling_rect`),
+  SVG and PNG all draw `cw` x `ch` cells, finished size uses both gauges,
+  and picture imports add rows so a photo keeps its shape at the gauge.
+  `.cgp` stores it as a third `FABRIC:` token, OXS as `stitchesperinch_y`.
+- Knitting charts number the way they're worked (`Chart::row_number` /
+  `col_number`: row 1 at the bottom, stitch 1 at the right), with heavy
+  every-10 lines counted the same way (`is_heavy_col_line` /
+  `is_heavy_row_line`) and row numbers on the right edge of the PDF.
+  `Chart::worked_in_round` (`.cgp` `ROUND: yes`) switches the reading
+  direction; `knit.rs` writes row-by-row instructions and flags long
+  floats and 3+ color rows for stranded work. Empty cells are the main
+  color; "materials" are each yarn's share of the stitches.
+- Quilt cells are finished squares; `Partial::Split` doubles as a
+  half-square triangle (the editor's triangle tool). `quilt.rs` turns the
+  chart into a cutting list (1/4 in seams; HSTs two at a time at + 7/8
+  in), yardage from strips across 40 in of usable width, backing, binding
+  and batting, and row-by-row assembly; `Chart::board` optionally groups
+  squares into blocks.
+
+Written instructions (`export::instructions_text`) appear in the editor,
+the Materials tab, the exported legend text and as extra PDF pages.
 
 ## What's real vs. stubbed
 
@@ -206,10 +328,10 @@ Shares the exact same resize/quantize/gauge-sizing/"send to grid"
 pipeline as image import - the rendered text is just another
 `DynamicImage` as far as the rest of the app is concerned.
 
-**Working - GUI:** five synchronized views (Grid / 3D / DSL / Image
-Import / Text) sharing one underlying pattern; the app starts directly
-in a blank paintable colorwork canvas rather than a placeholder shaped
-pattern. The Grid tab auto-switches between a shaped stitch-abbreviation
+**Working - GUI (crochet):** five synchronized views (Grid / 3D / DSL /
+Image Import / Text) sharing one underlying pattern; the app starts with
+the New Pattern picker over a blank paintable colorwork canvas (what you
+get if you close the picker) rather than a placeholder shaped pattern. The Grid tab auto-switches between a shaped stitch-abbreviation
 editor and a Stitch-Fiddle-style click/click-drag paint grid depending on
 which kind of pattern is loaded. The paint grid renders as a single GPU
 texture with one interactive region (not one widget per cell - an earlier
@@ -290,6 +412,16 @@ chart (matching real bottom-up working order, the opposite of colorwork's
 top-down photo convention) and a tension/color key page instead of a hex
 legend.
 
+**Working - chart crafts:** everything described under "Crafts" above:
+the chart editor (full/part stitches, backstitch, knots, fill, erase,
+triangle tool for quilts), picture/text import with catalog matching and
+confetti cleanup, craft switching with color re-matching, board/block
+splitting, `.cgp` and `.oxs` round-trips, SVG/PNG export, Materials tab,
+PDF with cover page, key, shopping list and instructions pages. Covered by
+unit tests in `crates/crossstitch` and `crates/app` (see "Testing"), and
+PDFs were rendered and checked visually during development - but the GUI
+side of the chart crafts hasn't had real-world use yet.
+
 **Working - dependency security process:** `.cargo/audit.toml` lists
 every currently-accepted advisory with a written justification per entry
 (unmaintained-but-low-risk-transitive, or - for the one real vulnerability,
@@ -305,9 +437,28 @@ entries were re-checked against the current RustSec advisory database on
 `paste`, `ttf-parser`) still have no patched version to move to, and
 `RUSTSEC-2026-0187`'s status changed (see the `printpdf` TODO entry below)
 but still has no drop-in fix - so the accepted list is unchanged, just
-re-dated.
+re-dated. The chart crafts added one dependency, `roxmltree` (read-only
+XML parsing for `.oxs`, no dependencies of its own, no advisories); chart
+files are also bounded (`cgp::MAX_CELLS`, one million cells) so a crafted
+`.cgp`/`.oxs` can't request a gigantic allocation.
 
 **Stubbed / TODO:**
+
+- **Chart-craft gaps:** knitting charts are colorwork only (no knit/purl,
+  cable or decrease symbols, no yarn yardage estimate - just each yarn's
+  share); quilts have no borders or sashing, and only the two-at-a-time
+  HST method; Pixelhobby, latch hook, pixel macrame and pixel art have
+  no manufacturer color catalogs (no open Pixelhobby dataset exists), so
+  they use named free colors - a user-loadable catalog CSV would fix that;
+  pixel macrame has no cord-length estimate; OXS beads, daisy/bugle lines
+  and other ornaments aren't modeled (reported on import); OXS save is
+  cross stitch and diamond painting only. Pack sizes, quilt yardage
+  assumptions and knitting gauge presets are common values, not
+  universal ones - the app says so where it uses them.
+- **DMC color data licensing:** `crossstitch/data/dmc.tsv` comes from an
+  MIT-licensed package that itself took it from an unlicensed project
+  (details in `threads.rs`); Cstitch's GPL-3.0-or-later DMC list is a
+  cleaner-licensed alternative if that matters.
 
 - **`printpdf` is pinned at 0.7, not upgraded.** `printpdf` 0.9.x still
   depends on the same vulnerable `lopdf` version the advisory above is
@@ -351,7 +502,15 @@ end-to-end smoke tests that generate real PDF files and check for
 non-trivial output), def_builder (name validation and both alias/raw-geometry
 DEF-line formatting extracted into pure functions, plus round-trip tests
 through the real `raw_def::parse_raw_def` parser and the full DSL parser
-for each form), and fonts (deterministic bundled-`FontFamily` data checks - valid
+for each form), crossstitch (CIEDE2000 against Sharma et al.'s published
+reference pairs, every catalog parsing with unique codes, exact `.cgp` and
+`.oxs` round-trips of every stitch kind and every craft, OXS import of a
+MacStitch-style file, confetti cleanup, hoop fit, skein/pack/yardage
+math, knitting row instructions and float detection, quilt cutting and
+HST pairing), the chart editor's tool logic (3/4, quarter, backstitch,
+knot, erase, quilt triangle - driven with synthetic pointer input, no
+window), print_crossstitch (a full multi-page PDF with every stitch kind,
+backstitch clipping at page edges, instruction wrapping), and fonts (deterministic bundled-`FontFamily` data checks - valid
 TTF/OTF headers, correct `bytes_for` variant selection, unique names -
 plus environment-tolerant tests for the `font-kit` system enumeration
 functions that don't assume anything about what's actually installed on

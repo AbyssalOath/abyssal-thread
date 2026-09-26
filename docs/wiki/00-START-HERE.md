@@ -9,16 +9,17 @@ getting comfortable enough to build features yourself.
 
 | File | What's in it |
 |---|---|
-| [01-core-crate.md](01-core-crate.md) | `StitchKind`, `StitchGraph`, `Vec3`, `ColorGrid` - the shared data model everything else builds on |
+| [01-core-crate.md](01-core-crate.md) | `StitchKind`, `StitchGraph`, `Vec3`, `ColorGrid`, `Craft` - the shared data model everything else builds on |
 | [02-lang-crate.md](02-lang-crate.md) | The DSL: lexer → parser → AST → eval, custom stitches, raw geometry |
 | [03-layout-crate.md](03-layout-crate.md) | 3D placement (`layout_ring`, `layout_flat_grid`), mass-spring relaxation, tension analysis |
 | [04-export-crate.md](04-export-crate.md) | SVG charts, OBJ export, color naming, filet crochet math |
 | [05-imageimport-crate.md](05-imageimport-crate.md) | Photo → colorwork grid: resize, k-means quantization, thresholding |
 | [06-app-cli-and-update.md](06-app-cli-and-update.md) | `main.rs` CLI, the self-updater |
-| [07-app-gui.md](07-app-gui.md) | The `eframe`/`egui` GUI: `GoblinApp`, the grid editors, 3D viewport, image/text import |
-| [08-print-pdf.md](08-print-pdf.md) | PDF generation/tiling for both pattern modes |
+| [07-app-gui.md](07-app-gui.md) | The `eframe`/`egui` GUI: `GoblinApp`, the New Pattern picker, the grid and chart editors, 3D viewport, image/text import |
+| [08-print-pdf.md](08-print-pdf.md) | PDF generation/tiling for crochet (both modes) and the chart crafts |
 | [09-rust-patterns-glossary.md](09-rust-patterns-glossary.md) | Rust language idioms this codebase uses, explained - for learning Rust itself |
 | [10-troubleshooting.md](10-troubleshooting.md) | Build issues, safety limits, known gaps, "why does X behave like that" |
+| [11-crossstitch-crate.md](11-crossstitch-crate.md) | The chart crafts (cross stitch, knitting, quilting, beads, diamond painting...): `Chart`, per-craft profiles, color catalogs, `.cgp`/`.oxs` formats |
 
 ## The one-paragraph mental model
 
@@ -36,12 +37,23 @@ is written against, so it never needs to know which mode produced the graph.
                                                             --export--> SVG/OBJ/PDF/legend
 ```
 
-Crate dependency order (each only depends on crates to its left):
+That's **crochet**. Every other craft (cross stitch, knitting, quilting,
+diamond painting, fuse beads, latch hook, Pixelhobby, pixel macrame, pixel
+art) is "a grid of colored cells" and uses a separate, simpler model - a
+`Chart` from `crates/crossstitch`, with no stitch graph or 3D layout at
+all. A `.cgp` file whose `CRAFT:` line names one of those crafts goes to
+the chart parser instead of the crochet one; see
+[11-crossstitch-crate.md](11-crossstitch-crate.md).
+
+Crate dependencies (from each crate's `Cargo.toml` - nothing depends on
+`app`, and there are no cycles):
 
 ```
-core  →  lang  →  layout  →  export  →  app (CLI + GUI)
-  ↑                                        ↑
-  └──────────── imageimport ───────────────┘
+core                          no workspace dependencies
+lang, layout, export,
+imageimport                   core only
+crossstitch                   core + export (for nearest_color_name)
+app (CLI + GUI)               all of the above
 ```
 
 ## How to actually use this wiki

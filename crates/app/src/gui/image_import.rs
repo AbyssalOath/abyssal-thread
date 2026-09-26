@@ -20,6 +20,9 @@ use eframe::egui::{self, Color32, ColorImage, TextureHandle, TextureOptions};
 use image::DynamicImage;
 
 use super::colorwork_grid::FiletColors;
+use super::crossstitch_grid::{chart_from_image, convert_settings_ui, size_ui, ConvertSettings};
+use abyssal_thread_core::Craft;
+use abyssal_thread_crossstitch::{Chart, Fabric, GridCraft};
 
 /// Whether the size controls are driven by direct stitch counts or by a
 /// desired finished size (converted through the gauge below). Switching
@@ -60,6 +63,16 @@ pub struct ImageImportState {
     desired_width_in: f32,
     desired_height_in: f32,
     grid: Option<ColorGrid>,
+    /// Craft the preview is for (the loaded pattern's craft, passed in to
+    /// `show` every frame). For cross stitch, `grid` is the DMC-snapped
+    /// rendering of `chart` rather than the raw k-means palette, so the
+    /// preview shows the floss colors you'll actually stitch with.
+    craft: Craft,
+    fabric_count: f32,
+    /// Row gauge for knitting charts (`None` = square cells).
+    fabric_count_y: Option<f32>,
+    convert: ConvertSettings,
+    chart: Option<Chart>,
     preview_texture: Option<TextureHandle>,
     export_svg_path: String,
     export_legend_path: String,
@@ -90,6 +103,11 @@ impl Default for ImageImportState {
             desired_width_in: 15.0,
             desired_height_in: 15.0,
             grid: None,
+            craft: Craft::Crochet,
+            fabric_count: 14.0,
+            fabric_count_y: None,
+            convert: ConvertSettings::default(),
+            chart: None,
             preview_texture: None,
             export_svg_path: "colorwork_chart.svg".to_string(),
             export_legend_path: "colorwork_legend.txt".to_string(),
@@ -122,7 +140,16 @@ impl ImageImportState {
 
     fn recompute(&mut self) {
         let Some(img) = &self.source else { return };
-        let resized = if self.lock_aspect {
+        // Knit stitches are shorter than wide, so keeping a picture's
+        // shape takes proportionally more rows than a square grid would.
+        let row_factor = self
+            .fabric_count_y
+            .map_or(1.0, |y| y / self.fabric_count.max(0.01));
+        let resized = if self.lock_aspect && (row_factor - 1.0).abs() > 1e-3 {
+            let (sw, sh) = (img.width().max(1) as f32, img.height().max(1) as f32);
+            let h = ((self.width as f32 * sh / sw * row_factor).round() as u32).max(1);
+            resize_exact(img, self.width, h, self.filter)
+        } else if self.lock_aspect {
             resize_preserving_aspect(img, Some(self.width), None, self.filter)
         } else {
             resize_exact(img, self.width, self.height, self.filter)
@@ -132,6 +159,24 @@ impl ImageImportState {
         // number always matches what was actually produced.
         self.height = resized.height();
         self.width = resized.width();
+        if let Some(grid_craft) = GridCraft::from_craft(self.craft) {
+            let chart = chart_from_image(
+                &resized,
+                self.colors,
+                Fabric {
+                    count: self.fabric_count,
+                    count_y: self.fabric_count_y,
+                    ..Fabric::default()
+                },
+                self.convert,
+                grid_craft,
+            );
+            self.grid = Some(chart.to_color_grid());
+            self.chart = Some(chart);
+            self.preview_texture = None;
+            return;
+        }
+        self.chart = None;
         self.grid = Some(if self.filet_mode {
             threshold(
                 &resized,
@@ -241,13 +286,35 @@ pub struct GridImportPayload {
     pub filet: Option<FiletColors>,
     pub fill_threshold: u8,
     pub invert_threshold: bool,
+    /// `Some` for a cross-stitch import - the floss-matched chart and the
+    /// settings that produced it (kept for re-rendering from source).
+    pub chart: Option<(Chart, ConvertSettings)>,
 }
 
 /// Returns `Some(payload)` when the user clicked "Send to Grid editor" this
 /// frame - `GoblinApp` uses this to populate the colorwork paint grid (and,
 /// via that, the DSL/3D views too) with the current image-import result.
-pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImportPayload> {
+pub fn show(
+    ui: &mut egui::Ui,
+    state: &mut ImageImportState,
+    craft: Craft,
+) -> Option<GridImportPayload> {
     let mut send_to_grid = None;
+    let grid_craft = GridCraft::from_craft(craft);
+    let is_chart = grid_craft.is_some();
+    if state.craft != craft {
+        state.craft = craft;
+        if let Some(g) = grid_craft {
+            state.filet_mode = false;
+            state.fabric_count = g.default_per_inch();
+            state.fabric_count_y = g.default_per_inch_y();
+            state.convert = ConvertSettings::for_craft(g);
+            state.colors = state.colors.max(8);
+            state.gauge_sts_per_4in = state.fabric_count * 4.0;
+            state.gauge_rows_per_4in = state.fabric_count_y.unwrap_or(state.fabric_count) * 4.0;
+        }
+        state.recompute();
+    }
     ui.horizontal(|ui| {
         if ui.button("Choose picture...").clicked() {
             if let Some(path) = rfd::FileDialog::new()
@@ -263,7 +330,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     });
 
     if state.source.is_none() {
-        ui.label("Choose a picture to convert it into a colorwork chart.");
+        ui.label(if is_chart {
+            "Choose a picture to convert it into a chart."
+        } else {
+            "Choose a picture to convert it into a colorwork chart."
+        });
         return None;
     }
 
@@ -286,19 +357,38 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
         }
     });
 
-    ui.horizontal(|ui| {
-        ui.label("Gauge:");
-        changed |= ui
-            .add(egui::DragValue::new(&mut state.gauge_sts_per_4in).range(1.0..=200.0).speed(0.1))
-            .changed();
-        ui.label("sts,");
-        changed |= ui
-            .add(egui::DragValue::new(&mut state.gauge_rows_per_4in).range(1.0..=200.0).speed(0.1))
-            .changed();
-        ui.label("rows, per 4 inches");
-    })
-    .response
-    .on_hover_text("From your yarn label or a swatch you crocheted and measured - not a substitute for either.");
+    if is_chart {
+        ui.horizontal(|ui| {
+            if size_ui(
+                ui,
+                "image_import_fabric_count",
+                grid_craft.unwrap_or(GridCraft::CrossStitch),
+                &mut state.fabric_count,
+                &mut state.fabric_count_y,
+            ) {
+                state.gauge_sts_per_4in = state.fabric_count * 4.0;
+                state.gauge_rows_per_4in = state.fabric_count_y.unwrap_or(state.fabric_count) * 4.0;
+                if state.size_mode == SizeMode::Inches {
+                    state.apply_gauge_size();
+                }
+                changed = true;
+            }
+        });
+    } else {
+        ui.horizontal(|ui| {
+            ui.label("Gauge:");
+            changed |= ui
+                .add(egui::DragValue::new(&mut state.gauge_sts_per_4in).range(1.0..=200.0).speed(0.1))
+                .changed();
+            ui.label("sts,");
+            changed |= ui
+                .add(egui::DragValue::new(&mut state.gauge_rows_per_4in).range(1.0..=200.0).speed(0.1))
+                .changed();
+            ui.label("rows, per 4 inches");
+        })
+        .response
+        .on_hover_text("From your yarn label or a swatch you crocheted and measured - not a substitute for either.");
+    }
 
     match state.size_mode {
         SizeMode::Stitches => {
@@ -378,10 +468,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     }
 
     ui.separator();
-    changed |= ui
-        .checkbox(&mut state.filet_mode, "Filet crochet mode")
-        .on_hover_text("Reduces the image to two colors (block/space) by brightness threshold instead of a full palette, and enables filet-specific chain count and written block/space instructions below.")
-        .changed();
+    if !is_chart {
+        changed |= ui
+            .checkbox(&mut state.filet_mode, "Filet crochet mode")
+            .on_hover_text("Reduces the image to two colors (block/space) by brightness threshold instead of a full palette, and enables filet-specific chain count and written block/space instructions below.")
+            .changed();
+    }
 
     if state.filet_mode {
         ui.heading("Fill");
@@ -404,11 +496,25 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
     } else {
         ui.heading("Colors");
         ui.horizontal(|ui| {
-            ui.label("Number of colors:");
+            ui.label(if is_chart {
+                "Max colors:"
+            } else {
+                "Number of colors:"
+            });
+            let max = grid_craft.map_or(16, |g| g.max_colors());
             changed |= ui
-                .add(egui::Slider::new(&mut state.colors, 1..=16))
+                .add(egui::Slider::new(&mut state.colors, 1..=max))
                 .changed();
         });
+        if is_chart {
+            changed |= convert_settings_ui(
+                ui,
+                "image_import_convert",
+                grid_craft.unwrap_or(GridCraft::CrossStitch),
+                &mut state.convert,
+            );
+            ui.small("Colors are matched to the nearest color in the chosen catalog, so similar colors may merge.");
+        }
     }
     ui.horizontal(|ui| {
         ui.label("Resize style:");
@@ -423,7 +529,19 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
             .radio_value(&mut state.filter, ResizeFilter::Smooth, "Smooth (photos)")
             .changed();
     });
-    if let Some(grid) = &state.grid {
+    if let Some(chart) = &state.chart {
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Floss:");
+            for f in &chart.palette {
+                let (rect, resp) =
+                    ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                let [r, g, b] = f.rgb;
+                ui.painter()
+                    .rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
+                resp.on_hover_text(f.label());
+            }
+        });
+    } else if let Some(grid) = &state.grid {
         ui.horizontal_wrapped(|ui| {
             ui.label("Palette:");
             for [r, g, b] in grid.palette() {
@@ -459,7 +577,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
 
     ui.separator();
     ui.horizontal(|ui| {
-        if ui.button("Export SVG chart...").clicked() {
+        if !is_chart && ui.button("Export SVG chart...").clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter("SVG", &["svg"])
                 .set_file_name(&state.export_svg_path)
@@ -469,7 +587,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
                 state.export_svg();
             }
         }
-        if ui.button("Export text legend...").clicked() {
+        if !is_chart && ui.button("Export text legend...").clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter("Text", &["txt"])
                 .set_file_name(&state.export_legend_path)
@@ -480,9 +598,14 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
             }
         }
         ui.separator();
+        let (label, hover) = if is_chart {
+            ("Send to Chart editor \u{2192}", "Open this in the chart editor for touch-ups, color changes, sizing and printing. Keeps the source photo so resizing there re-renders instead of cropping.")
+        } else {
+            ("Send to Grid editor \u{2192}", "Load this into the paint-grid editor for fine manual touch-ups (also updates the DSL and 3D tabs). Keeps the source photo so resizing there rescales properly instead of cropping.")
+        };
         if ui
-            .button("Send to Grid editor \u{2192}")
-            .on_hover_text("Load this into the paint-grid editor for fine manual touch-ups (also updates the DSL and 3D tabs). Keeps the source photo so resizing there rescales properly instead of cropping.")
+            .button(label)
+            .on_hover_text(hover)
             .clicked()
         {
             if let (Some(grid), Some(source)) = (&state.grid, &state.source) {
@@ -494,6 +617,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut ImageImportState) -> Option<GridImpor
                     filet: state.filet_colors(),
                     fill_threshold: state.fill_threshold,
                     invert_threshold: state.invert_threshold,
+                    chart: state.chart.clone().map(|c| (c, state.convert)),
                 });
             }
         }

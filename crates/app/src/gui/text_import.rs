@@ -19,10 +19,15 @@
 //! line on its own, matching how the reference image was laid out.
 
 use crate::gui::colorwork_grid::FiletColors;
+use crate::gui::crossstitch_grid::{
+    chart_from_image, convert_settings_ui, size_ui, ConvertSettings,
+};
 use crate::gui::fonts::FONT_FAMILIES;
 use crate::gui::image_import::GridImportPayload;
 use ab_glyph::{FontArc, PxScale};
 use abyssal_thread_core::ColorGrid;
+use abyssal_thread_core::Craft;
+use abyssal_thread_crossstitch::{Chart, Fabric, GridCraft};
 use abyssal_thread_imageimport::{
     quantize, resize_exact, resize_preserving_aspect, threshold, ResizeFilter,
 };
@@ -70,6 +75,14 @@ pub struct TextImportState {
     desired_width_in: f32,
     desired_height_in: f32,
     grid: Option<ColorGrid>,
+    /// Cross-stitch counterparts of the fields on `ImageImportState` -
+    /// see its doc comment.
+    craft: Craft,
+    fabric_count: f32,
+    /// Row gauge for knitting charts (`None` = square cells).
+    fabric_count_y: Option<f32>,
+    convert: ConvertSettings,
+    chart: Option<Chart>,
     preview_texture: Option<TextureHandle>,
     status: String,
 }
@@ -103,6 +116,11 @@ impl Default for TextImportState {
             desired_width_in: 15.0,
             desired_height_in: 15.0,
             grid: None,
+            craft: Craft::Crochet,
+            fabric_count: 14.0,
+            fabric_count_y: None,
+            convert: ConvertSettings::default(),
+            chart: None,
             preview_texture: None,
             status: String::new(),
         };
@@ -201,13 +219,40 @@ impl TextImportState {
 
     fn recompute(&mut self) {
         let Some(source) = &self.rendered else { return };
-        let resized = if self.lock_aspect {
+        // Knit stitches are shorter than wide, so keeping a picture's
+        // shape takes proportionally more rows than a square grid would.
+        let row_factor = self
+            .fabric_count_y
+            .map_or(1.0, |y| y / self.fabric_count.max(0.01));
+        let resized = if self.lock_aspect && (row_factor - 1.0).abs() > 1e-3 {
+            let (sw, sh) = (source.width().max(1) as f32, source.height().max(1) as f32);
+            let h = ((self.width as f32 * sh / sw * row_factor).round() as u32).max(1);
+            resize_exact(source, self.width, h, self.filter)
+        } else if self.lock_aspect {
             resize_preserving_aspect(source, Some(self.width), None, self.filter)
         } else {
             resize_exact(source, self.width, self.height, self.filter)
         };
         self.height = resized.height();
         self.width = resized.width();
+        if let Some(grid_craft) = GridCraft::from_craft(self.craft) {
+            let chart = chart_from_image(
+                &resized,
+                self.colors,
+                Fabric {
+                    count: self.fabric_count,
+                    count_y: self.fabric_count_y,
+                    ..Fabric::default()
+                },
+                self.convert,
+                grid_craft,
+            );
+            self.grid = Some(chart.to_color_grid());
+            self.chart = Some(chart);
+            self.preview_texture = None;
+            return;
+        }
+        self.chart = None;
         self.grid = Some(if self.filet_mode {
             threshold(
                 &resized,
@@ -271,9 +316,27 @@ impl TextImportState {
 }
 
 /// Returns `Some(payload)` when "Send to Grid editor" was clicked this frame.
-pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImportPayload> {
+pub fn show(
+    ui: &mut egui::Ui,
+    state: &mut TextImportState,
+    craft: Craft,
+) -> Option<GridImportPayload> {
     let mut send_to_grid = None;
     let mut changed = false;
+    let grid_craft = GridCraft::from_craft(craft);
+    let is_chart = grid_craft.is_some();
+    if state.craft != craft {
+        state.craft = craft;
+        if let Some(g) = grid_craft {
+            state.filet_mode = false;
+            state.fabric_count = g.default_per_inch();
+            state.fabric_count_y = g.default_per_inch_y();
+            state.convert = ConvertSettings::for_craft(g);
+            state.gauge_sts_per_4in = state.fabric_count * 4.0;
+            state.gauge_rows_per_4in = state.fabric_count_y.unwrap_or(state.fabric_count) * 4.0;
+        }
+        state.recompute();
+    }
 
     ui.horizontal(|ui| {
         ui.label("Font:");
@@ -388,25 +451,44 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
             state.sync_inches_from_stitches();
         }
     });
-    ui.horizontal(|ui| {
-        ui.label("Gauge:");
-        size_changed |= ui
-            .add(
-                egui::DragValue::new(&mut state.gauge_sts_per_4in)
-                    .range(1.0..=200.0)
-                    .speed(0.1),
-            )
-            .changed();
-        ui.label("sts,");
-        size_changed |= ui
-            .add(
-                egui::DragValue::new(&mut state.gauge_rows_per_4in)
-                    .range(1.0..=200.0)
-                    .speed(0.1),
-            )
-            .changed();
-        ui.label("rows, per 4 inches");
-    });
+    if is_chart {
+        ui.horizontal(|ui| {
+            if size_ui(
+                ui,
+                "text_import_fabric_count",
+                grid_craft.unwrap_or(GridCraft::CrossStitch),
+                &mut state.fabric_count,
+                &mut state.fabric_count_y,
+            ) {
+                state.gauge_sts_per_4in = state.fabric_count * 4.0;
+                state.gauge_rows_per_4in = state.fabric_count_y.unwrap_or(state.fabric_count) * 4.0;
+                if state.size_mode == SizeMode::Inches {
+                    state.apply_gauge_size();
+                }
+                size_changed = true;
+            }
+        });
+    } else {
+        ui.horizontal(|ui| {
+            ui.label("Gauge:");
+            size_changed |= ui
+                .add(
+                    egui::DragValue::new(&mut state.gauge_sts_per_4in)
+                        .range(1.0..=200.0)
+                        .speed(0.1),
+                )
+                .changed();
+            ui.label("sts,");
+            size_changed |= ui
+                .add(
+                    egui::DragValue::new(&mut state.gauge_rows_per_4in)
+                        .range(1.0..=200.0)
+                        .speed(0.1),
+                )
+                .changed();
+            ui.label("rows, per 4 inches");
+        });
+    }
 
     match state.size_mode {
         SizeMode::Stitches => {
@@ -460,10 +542,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
         .checkbox(&mut state.lock_aspect, "Lock aspect ratio")
         .changed();
 
-    size_changed |= ui
+    if !is_chart {
+        size_changed |= ui
         .checkbox(&mut state.filet_mode, "Filet crochet mode")
         .on_hover_text("Reduces to two colors (block/space, using the text/background colors above) by brightness threshold, and enables filet-specific chain count and written block/space instructions.")
         .changed();
+    }
     if state.filet_mode {
         ui.horizontal(|ui| {
             ui.label("Fill threshold:");
@@ -475,11 +559,25 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
         });
     } else {
         ui.horizontal(|ui| {
-            ui.label("Number of colors:");
+            ui.label(if is_chart {
+                "Max colors:"
+            } else {
+                "Number of colors:"
+            });
+            let max = grid_craft.map_or(16, |g| g.max_colors());
             size_changed |= ui
-                .add(egui::Slider::new(&mut state.colors, 1..=16))
+                .add(egui::Slider::new(&mut state.colors, 1..=max))
                 .changed();
         });
+        if is_chart {
+            size_changed |= convert_settings_ui(
+                ui,
+                "text_import_convert",
+                grid_craft.unwrap_or(GridCraft::CrossStitch),
+                &mut state.convert,
+            );
+            ui.small("Colors are matched to the nearest color in the chosen catalog, so similar colors may merge.");
+        }
     }
     ui.horizontal(|ui| {
         ui.label("Resize style:");
@@ -529,11 +627,15 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
     }
 
     ui.separator();
-    if ui
-        .button("Send to Grid editor \u{2192}")
-        .on_hover_text("Load this into the paint-grid editor for fine manual touch-ups (also updates the DSL and 3D tabs).")
-        .clicked()
-    {
+    let (label, hover) = if is_chart {
+        (
+            "Send to Chart editor \u{2192}",
+            "Open this in the chart editor for touch-ups, color changes and printing.",
+        )
+    } else {
+        ("Send to Grid editor \u{2192}", "Load this into the paint-grid editor for fine manual touch-ups (also updates the DSL and 3D tabs).")
+    };
+    if ui.button(label).on_hover_text(hover).clicked() {
         if let (Some(grid), Some(rendered)) = (&state.grid, &state.rendered) {
             send_to_grid = Some(GridImportPayload {
                 grid: grid.clone(),
@@ -543,6 +645,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TextImportState) -> Option<GridImport
                 filet: state.filet_colors(),
                 fill_threshold: state.fill_threshold,
                 invert_threshold: state.invert_threshold,
+                chart: state.chart.clone().map(|c| (c, state.convert)),
             });
         }
     }

@@ -3,6 +3,110 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.9] - 2026-09-26
+
+### Added
+- **Nine new crafts** alongside crochet: cross stitch, knitting, quilting,
+  diamond painting, fuse beads, latch hook, Pixelhobby, pixel macrame and
+  pixel art. A **New Pattern picker** (on launch, and via **New...** in
+  the toolbar) chooses the craft and whether to start blank, from a
+  picture, from text, or from a file. The craft is stored in the pattern,
+  so opening a file always opens it in the right craft.
+- **Chart editor** shared by every non-crochet craft: draw, fill and erase
+  tools, zoom, symbols, a heavy line every 10 cells, hover readout,
+  confetti cleanup ("merge specks smaller than N"), a color palette with
+  catalog search and closest-color suggestions, and switching a chart to
+  another craft with its colors re-matched. A **Materials** tab shows the
+  design summary, color key, shopping list and (knitting/quilting) written
+  instructions.
+- **Picture and text import** for every chart craft, reusing the crochet
+  resize + k-means pipeline, then matching colors to the craft's catalog
+  by CIEDE2000, optionally leaving the background empty and removing
+  confetti.
+- **Color catalogs:** DMC and Anchor floss, Diamond Dotz drills, and
+  Perler, Hama and Artkal beads (midi and mini). Crafts without a catalog
+  use free colors named by nearest common color.
+- **Cross stitch:** full, half, three-quarter and quarter stitches,
+  backstitch, French knots, blended threads and per-floss strand counts;
+  Aida counts and hoop sizing, including "size design to fit hoop"; skein
+  estimates per physical thread.
+- **Knitting:** colorwork charts at a separate stitch and row gauge (cells
+  drawn wider than tall everywhere, yarn-weight presets), numbered row 1
+  at the bottom and stitch 1 at the right, flat or in the round, with
+  written row-by-row instructions and long-float / 3+-color row warnings.
+- **Quilting:** pixel and half-square-triangle quilts in finished-square
+  sizes, with a cutting list (HSTs made two at a time), yardage per
+  fabric, backing, binding and batting, optional blocks, and row-by-row
+  assembly.
+- **Boards and packs:** fuse-bead pegboards and Pixelhobby baseplates
+  (red board lines in the editor and PDF, board counts in the materials);
+  bags of drills/beads with a spare allowance and Pixelhobby pixelsquares
+  in the shopping list.
+- **File formats:** `.oxs` (MacStitch / WinStitch / KXStitch) open and
+  save for cross stitch and diamond painting, including part stitches,
+  backstitch, knots, blends and row gauge; OXS items that aren't modeled
+  (beads, daisy/bugle lines...) are reported on import rather than
+  dropped silently. Every chart craft also saves as `.cgp` with a
+  `CRAFT:` line.
+- **Exports:** a chart-craft PDF (cover page with info, key and shopping
+  list; tiled symbol-chart pages with center arrows; instructions pages),
+  symbol SVG, PNG image, and a materials text file via "Export legend...".
+- New `abyssal-thread-crossstitch` crate holding the chart model, craft
+  profiles, catalogs and file formats; new dependency `roxmltree`
+  (read-only XML, no dependencies of its own).
+
+### Changed
+- The app opens with the New Pattern picker instead of going straight to
+  a blank crochet colorwork canvas (closing the picker still gives you
+  that canvas; recovering an autosave skips the picker).
+- Open/Save dialogs accept `.oxs` as well as `.cgp`; "Export OBJ..." is
+  only enabled when there's a crochet stitch graph to export.
+- `build` on the command line gives a clear error when handed a chart
+  `.cgp` (it compiles crochet patterns only).
+
+## [0.2.8] - 2026-09-21
+
+### Added
+- Self-updater: the app checks GitHub releases on startup (silently - no
+  nagging when offline) and via "Check for Updates" in the toolbar, then
+  offers to open the release page or download and run the right installer
+  for your OS (`crates/app/src/update.rs`).
+- Contributor wiki in `docs/wiki/` - crate-by-crate notes for learning the
+  codebase.
+- Ko-fi support link (README and `.github/FUNDING.yml`).
+
+### Fixed
+- Windows: the executable itself now carries the app icon (embedded via
+  `build.rs`), so Explorer, the taskbar and "Apps & Features" no longer
+  show a generic icon; the window icon is set at runtime too.
+
+### Changed
+- README install section rewritten around the prebuilt release installers.
+
+### Security
+- `rustls` 0.23.44 -> 0.23.45 to clear a `cargo audit` failure.
+
+## [0.2.7] - 2026-09-13
+
+### Added
+- Filet crochet: a Filet mode in Image and Text import reduces a picture
+  to blocks and spaces by brightness threshold (with invert), and the paint
+  grid then shows the foundation chain count and written block/space row
+  instructions, which are also exported as text and added to the PDF
+  (`crates/export/src/filet.rs`).
+
+## [0.2.6] - 2026-09-13
+
+### Added
+- Cross-platform installer packaging in the release workflow (Windows
+  `.exe`/`.msi`, macOS `.dmg`, Linux `.AppImage`/`.deb`) and app icons.
+
+### Fixed
+- Running the app with no arguments (e.g. double-clicking it) opens the
+  GUI instead of printing CLI usage and exiting.
+- Windows: the installed app no longer opens a blank terminal window
+  behind the GUI; `build ...` from a terminal still prints its output.
+
 ## [0.2.5] - 2026-09-10
 
 ### Added
